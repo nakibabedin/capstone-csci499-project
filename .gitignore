@@ -1,0 +1,47 @@
+# ---------- Python / Flask ----------
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+instance/
+*.db
+*.sqlite3
+
+# ---------- Node / React (Vite) ----------
+node_modules/
+dist/
+dist-ssr/
+build/
+coverage/
+*.tsbuildinfo
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Environment / secrets ----------
+.env
+.env.*
+!.env.example
+*.local
+
+# ---------- Uploads ----------
+uploads/
+
+# ---------- OS / editors ----------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+*.log
