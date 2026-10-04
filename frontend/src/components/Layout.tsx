@@ -5,6 +5,7 @@ const links = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/upload', label: 'Upload' },
   { to: '/about', label: 'About' },
+  { to: '/login', label: 'Login' },
 ]
 
 export default function Layout() {
