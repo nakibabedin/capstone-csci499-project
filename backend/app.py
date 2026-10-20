@@ -104,14 +104,23 @@ def upload():
     upload_id = uuid4().hex
     upload_folder = Path(app.config["UPLOAD_FOLDER"])
     destination = upload_folder / f"{upload_id}.pdf"
+    created = False
     try:
         upload_folder.mkdir(parents=True, exist_ok=True)
         # Exclusive creation prevents an existing file from being overwritten.
         with destination.open("xb") as output:
+            created = True
             file.save(output)
         size = destination.stat().st_size
     except OSError:
         app.logger.exception("Could not save upload %s", upload_id)
+        # Only remove a file created by this request, never an existing file
+        # that caused exclusive creation to fail.
+        if created:
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                app.logger.exception("Could not clean up upload %s", upload_id)
         return jsonify({"error": "Could not save the uploaded file"}), 500
 
     return jsonify({

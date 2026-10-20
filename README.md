@@ -38,6 +38,12 @@ excluded from Git. A successful response has status 201 and includes
 `upload_id`, a sanitized `filename`, `size` in bytes, `status: "uploaded"`, and
 `message`. Existing frontend response fields are retained.
 
+If a storage operation fails after this request creates a file, the endpoint
+attempts to remove that incomplete upload before returning 500. It preserves
+any existing file that caused exclusive creation to fail. If cleanup itself
+fails, the server logs that failure and still returns the JSON storage error.
+This handles caught storage errors, not abrupt process termination or power loss.
+
 Uploads survive server restarts, but there is no report metadata database,
 parser, user ownership, or download endpoint yet. Use synthetic reports for
 development. Parser readability checks and database integration are next steps.

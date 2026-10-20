@@ -2,7 +2,7 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from app import app
 
@@ -64,6 +64,43 @@ class UploadTests(unittest.TestCase):
             response = self.upload()
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json, {"error": "Could not save the uploaded file"})
+
+    def test_partial_write_is_removed_and_next_upload_succeeds(self):
+        def fail_after_writing(output):
+            output.write(b"%PDF-partial")
+            raise OSError("simulated interrupted write")
+
+        with patch("werkzeug.datastructures.FileStorage.save",
+                   side_effect=fail_after_writing):
+            response = self.upload()
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json, {"error": "Could not save the uploaded file"})
+        self.assertEqual(list(Path(self.folder.name).iterdir()), [])
+        self.assertEqual(self.upload().status_code, 201)
+
+    def test_existing_file_is_preserved_on_id_collision(self):
+        existing = Path(self.folder.name) / "existing.pdf"
+        original = b"previous upload must survive"
+        existing.write_bytes(original)
+        with patch("app.uuid4", return_value=Mock(hex="existing")):
+            response = self.upload()
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(existing.read_bytes(), original)
+        self.assertEqual(list(Path(self.folder.name).iterdir()), [existing])
+
+    def test_cleanup_failure_still_returns_json(self):
+        def fail_after_writing(output):
+            output.write(b"%PDF-partial")
+            raise OSError("simulated interrupted write")
+
+        with patch("werkzeug.datastructures.FileStorage.save",
+                   side_effect=fail_after_writing), patch(
+                       "app.Path.unlink", side_effect=PermissionError("cleanup denied")):
+            response = self.upload()
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json, {"error": "Could not save the uploaded file"})
+        # Cleanup can fail too. The error is logged and the response stays JSON.
+        self.assertEqual(len(list(Path(self.folder.name).iterdir())), 1)
 
 
 if __name__ == "__main__":
