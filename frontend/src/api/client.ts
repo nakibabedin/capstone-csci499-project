@@ -1,6 +1,8 @@
 // Thin wrapper around fetch for talking to the Flask backend.
 // In dev, Vite proxies /api to http://localhost:5001 (see vite.config.ts).
 
+import { supabase } from './supabase'
+
 export interface Item {
   id: number
   name: string
@@ -13,12 +15,27 @@ export interface User {
   email: string
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, options)
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const { data } = await supabase.auth.getSession()
+  const headers = new Headers(options.headers)
+
+  if (data.session?.access_token) {
+    headers.set('Authorization', `Bearer ${data.session.access_token}`)
+  }
+
+  const res = await fetch(`/api${path}`, {
+    ...options,
+    headers,
+  })
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.error ?? `Request failed: ${res.status}`)
   }
+
   return res.json() as Promise<T>
 }
 
