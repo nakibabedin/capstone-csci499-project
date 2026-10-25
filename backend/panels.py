@@ -5,13 +5,12 @@
     derive         -> values a report left out but that follow from others (Non-HDL, Globulin, ...)
     detect_panels  -> which test panels the report contains, and their missing tests
     review_list    -> the tests of the detected panels, for the user to check and correct
-    feature_vector -> one value per registry biomarker, in a fixed order, for models
+
+Per-panel model inputs and analysis live in analysis.py.
 """
 
 from biomarkers import BIOMARKERS, PANELS, normalize_answer
 from units import normalize_unit, to_canonical
-
-FEATURE_SCHEMA_VERSION = 1
 
 # A differential count's percentage and absolute count often share a printed name
 # ("Neutrophils"); the unit tells them apart.
@@ -181,15 +180,3 @@ def review_list(results, panels):
                     **spec_fields, "found": False,
                 })
     return biomarkers
-
-
-def feature_vector(results):
-    """Every registry biomarker in registry order, mapped to its canonical-unit
-    value (reported values before derived ones) or None. Suspect values are left out."""
-    values = _first_values([r for r in results if not r.get("derived")])
-    for name, value in _first_values([r for r in results if r.get("derived")]).items():
-        values.setdefault(name, value)
-    return {
-        "schema_version": FEATURE_SCHEMA_VERSION,
-        "values": {name: values.get(name) for name in BIOMARKERS},
-    }

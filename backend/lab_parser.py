@@ -22,7 +22,8 @@ from collections import Counter
 import pymupdf
 
 from biomarkers import BIOMARKERS, normalize_answer
-from panels import derive, detect_panels, enrich, feature_vector, review_list
+from analysis import available_analyses
+from panels import derive, detect_panels, enrich, review_list
 
 # Text whose vertical centers are within this many points shares a line.
 LINE_TOLERANCE = 3.0
@@ -382,7 +383,8 @@ def parse_lab_report(contents, max_pages):
                   plus derived results marked `derived`
       panels    - the test panels detected, with their missing tests
       biomarkers - the detected panels' tests for the user to review and correct
-      features  - one canonical-unit value per known biomarker, for models
+      analyses  - a per-panel analysis (model inputs, findings, indices) for every
+                  panel with enough tests present (see analysis.py)
       unparsed  - lines that contain both letters and digits but didn't match a
                   result row (useful for spotting layouts the rules miss)
     report is None if the PDF has no extractable text (e.g. a scanned image).
@@ -418,7 +420,7 @@ def parse_lab_report(contents, max_pages):
         "results": results,
         "panels": panels,
         "biomarkers": review_list(results, panels),
-        "features": feature_vector(results),
+        "analyses": available_analyses(results),
         "unparsed": unparsed,
     }
     return report, len(pages)

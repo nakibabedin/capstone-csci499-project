@@ -1,5 +1,5 @@
 from biomarkers import BIOMARKERS, PANELS
-from panels import derive, detect_panels, enrich, feature_vector, review_list
+from panels import derive, detect_panels, enrich, review_list
 
 
 def result(canonical, value, unit=None, section=None, **extra):
@@ -59,10 +59,9 @@ def test_differential_absolute_count_is_relabelled_by_unit():
     assert r["value_std"] == 7.716
 
 
-def test_implausible_value_is_suspect_and_kept_out_of_features():
+def test_implausible_value_is_suspect():
     results = enrich([result("Glucose", 9500)])
     assert results[0]["suspect"]
-    assert feature_vector(results)["values"]["Glucose"] is None
 
 
 def test_derived_values():
@@ -94,13 +93,6 @@ def test_review_list_has_placeholders_for_missing_and_dedups_across_panels():
     assert glucose["panel"] == "cmp" and glucose["found"]
     assert all(b["found"] for b in items)  # CMP and diabetes are both complete
     assert {b["panel"] for b in items} == {"cmp", "diabetes"}
-
-
-def test_feature_vector_covers_every_biomarker_in_order():
-    features = feature_vector(enrich([result("Hemoglobin", 145, unit="g/L")]))
-    assert list(features["values"]) == list(BIOMARKERS)
-    assert features["values"]["Hemoglobin"] == 14.5
-    assert features["values"]["Glucose"] is None
 
 
 def test_word_answer_status():

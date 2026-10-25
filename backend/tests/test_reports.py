@@ -31,7 +31,7 @@ def test_parse_uploaded_report(client):
     upload_id = upload(client, make_pdf(["Hemoglobin 13.5 g/dL 12.0 - 15.5"]))
     res = client.post(f"/api/uploads/{upload_id}/parse")
     assert res.status_code == 200
-    assert {"results", "biomarkers", "panels", "features", "unparsed"} <= res.json["document"].keys()
+    assert {"results", "biomarkers", "panels", "analyses", "unparsed"} <= res.json["document"].keys()
 
 
 def test_rejects_malformed_upload_id(client):
