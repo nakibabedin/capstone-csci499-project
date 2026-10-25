@@ -21,7 +21,13 @@ or trained models are committed.
 | `03_train_liver_model` | A template trained model that predicts fatty liver (elastography CAP ≥ 285 dB/m) from the Liver panel plus age and sex. It is evaluated with calibration and subgroup checks, then exported with its metadata to `ml/artifacts/`. |
 | `04_evaluate_liver_model` | Tests the saved liver model on held-out 2017–2020 adults and on the independent August 2021–August 2023 cycle. It covers AUROC with bootstrap intervals and calibration, against ALT alone and the published HSI/FLI scores. It also reports operating thresholds, subgroups, missing-test scenarios and input importance, and writes `evaluation.json` next to the model. |
 
-`nhanes.py` holds the shared download, registry-mapping and unit-conversion code.
+| `05_liver_model_v2` | Builds the liver model the app uses. It adds BMI and metabolic labs, tunes by cross-validation and recalibrates on held-out participants. After evaluating it like notebook 04, it exports it to `backend/models/trained/liver_fatty_liver/v2/`. |
+
+`nhanes.py` holds the shared download, registry-mapping and unit-conversion code, and
+`evaluation.py` the survey-weighted metrics.
+
+**scikit-learn version:** trained models are saved with `joblib` (pickle), so `ml/` and
+`backend/` must use the same scikit-learn version. Both pin it.
 
 **Data:** [NHANES](https://wwwn.cdc.gov/nchs/nhanes/) (CDC/NCHS), public domain.
 Use the exam weights (`weight`, from `WTMECPRP`) for population estimates.

@@ -7,5 +7,5 @@ pandas
 pyarrow
 pyreadstat
 matplotlib
-scikit-learn
+scikit-learn==1.9.1  # must match backend/requirements.txt: trained models are pickled
 joblib
