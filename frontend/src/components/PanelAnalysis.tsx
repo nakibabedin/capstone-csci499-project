@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { summarizePanel, type PanelAnalysis, type Patient } from '../api/reports'
 import type { LabResult } from './BiomarkerEditor'
+import ModelOutputs from './ModelOutputs'
 import { StatusPill } from './status'
 
 /** Renders the model's plain-text summary: "- " lines as bullets, "Heading:" lines as headings. */
@@ -43,7 +44,7 @@ export default function PanelAnalysisCard({ analysis, results, patient }: Props)
   const [summary, setSummary] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [summarizing, setSummarizing] = useState(false)
-  const { name, coverage, findings, indices, model, inputs } = analysis
+  const { name, coverage, findings, indices, models, inputs } = analysis
 
   async function summarize() {
     setSummary('')
@@ -110,12 +111,7 @@ export default function PanelAnalysisCard({ analysis, results, patient }: Props)
         </div>
       )}
 
-      {model && (
-        <div className="model-output">
-          <span className="field-label">Model</span>
-          <pre>{JSON.stringify(model, null, 2)}</pre>
-        </div>
-      )}
+      <ModelOutputs outputs={models} />
 
       {inputs.missing.length > 0 && <p className="muted small">Not in this report: {inputs.missing.join(', ')}</p>}
 

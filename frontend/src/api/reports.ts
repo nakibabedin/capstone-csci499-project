@@ -3,6 +3,18 @@
 
 import type { Biomarker, LabResult, Panel } from '../components/BiomarkerEditor'
 
+/** A formula's or trained model's result; see the MODELS comment in backend/analysis.py. */
+export interface ModelOutput {
+  name: string
+  /** null when it couldn't be computed; `missing` then says what it needed. */
+  value: number | null
+  unit: string | null
+  interpretation: string | null
+  model_version?: string
+  missing?: string[]
+  error?: string
+}
+
 /** One panel's analysis; see available_analyses() in backend/analysis.py. */
 export interface PanelAnalysis {
   id: string
@@ -25,8 +37,8 @@ export interface PanelAnalysis {
     suspect: boolean
   }[]
   indices: { name: string; value: number; note: string }[]
-  /** The panel's ML model output, once one is registered. */
-  model: Record<string, unknown> | null
+  /** Outputs of the panel's formulas and models. */
+  models: ModelOutput[]
 }
 
 /** Age (years) and sex from the report header, confirmed or corrected by the user. */
@@ -43,6 +55,8 @@ export interface ParsedDocument {
   panels: Panel[]
   patient: Patient
   analyses: PanelAnalysis[]
+  /** Outputs of models that use several panels at once (biological age). */
+  overall: ModelOutput[]
   unparsed: { line: string; page: number }[]
 }
 
@@ -68,9 +82,13 @@ export async function uploadReport(file: File): Promise<ParsedDocument> {
 }
 
 /** Re-analyzes every panel from (possibly user-corrected) results. */
-export async function analyze(results: LabResult[], patient: Patient): Promise<PanelAnalysis[]> {
-  const { analyses } = await postJson<{ analyses: PanelAnalysis[] }>('/analyze', json({ results, patient }))
-  return analyses
+export interface Analysis {
+  analyses: PanelAnalysis[]
+  overall: ModelOutput[]
+}
+
+export function analyze(results: LabResult[], patient: Patient): Promise<Analysis> {
+  return postJson<Analysis>('/analyze', json({ results, patient }))
 }
 
 /** Returns the raw response so the caller can stream the panel's plain-text summary. */

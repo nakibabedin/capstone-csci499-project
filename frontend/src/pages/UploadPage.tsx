@@ -1,6 +1,7 @@
 import { useState, type DragEvent, type FormEvent } from 'react'
-import { analyze, uploadReport, type PanelAnalysis, type ParsedDocument, type Patient } from '../api/reports'
+import { analyze, uploadReport, type Analysis, type ParsedDocument, type Patient } from '../api/reports'
 import BiomarkerEditor, { type LabResult, type Panel } from '../components/BiomarkerEditor'
+import ModelOutputs from '../components/ModelOutputs'
 import PanelAnalysisCard from '../components/PanelAnalysis'
 import { resultStatus, StatusPill, type Status } from '../components/status'
 import './UploadPage.css'
@@ -110,7 +111,7 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   // The confirmed (possibly corrected) results and the panel analyses computed from them.
-  const [confirmed, setConfirmed] = useState<{ results: LabResult[]; patient: Patient; analyses: PanelAnalysis[] } | null>(null)
+  const [confirmed, setConfirmed] = useState<({ results: LabResult[]; patient: Patient } & Analysis) | null>(null)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   // Bumped on each upload so the editor starts fresh from the new parse,
@@ -139,7 +140,7 @@ export default function UploadPage() {
     clearAnalysis()
     setAnalyzing(true)
     try {
-      setConfirmed({ results, patient, analyses: await analyze(results, patient) })
+      setConfirmed({ results, patient, ...(await analyze(results, patient)) })
       setConfirmId((id) => id + 1)
     } catch (err) {
       setAnalyzeError(err instanceof TypeError ? 'Could not reach the server while analyzing.' : (err as Error).message)
@@ -246,6 +247,20 @@ export default function UploadPage() {
       {confirmed && (
         <>
           <h2 className="section-title">Panel analysis</h2>
+          {confirmed.overall.length > 0 && (
+            <section className="card panel-analysis">
+              <div className="card-head">
+                <div>
+                  <h2>Overall</h2>
+                  <p className="muted">Calculations that use tests from several panels</p>
+                </div>
+              </div>
+              <ModelOutputs outputs={confirmed.overall} />
+              <p className="disclaimer">
+                Calculated with published research formulas for information only — not medical advice.
+              </p>
+            </section>
+          )}
           {confirmed.analyses.length === 0 && (
             <p className="muted">None of this report's panels have enough tests to analyze.</p>
           )}
