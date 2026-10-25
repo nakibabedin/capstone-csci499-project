@@ -39,12 +39,13 @@ def upload_pdf():
 
 @app.route("/summarize", methods=["POST"])
 def summarize():
-    results = (request.get_json(silent=True) or {}).get("results")
+    body = request.get_json(silent=True) or {}
+    results = body.get("results")
     if not results:
         return jsonify({"error": "No results to summarize."}), 400
 
     try:
-        chunks = stream_summary(results)
+        chunks = stream_summary(results, body.get("panels") or [])
     except ConnectionError:
         return jsonify({"error": "Could not reach Ollama. Is `ollama serve` running?"}), 503
     except ollama.ResponseError as e:

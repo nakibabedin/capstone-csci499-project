@@ -12,12 +12,28 @@ export interface LabResult {
   ref_low: number | null
   ref_high: number | null
   section?: string | null
-  page?: number
+  page?: number | null
+  loinc?: string | null
+  value_std?: number | null
+  unit_std?: string | null
+  suspect?: boolean
+  derived?: boolean
 }
 
 export interface Biomarker extends LabResult {
   canonical: string
   found: boolean
+  panel: string
+  canonical_unit: string | null
+  plausible: [number, number]
+}
+
+export interface Panel {
+  id: string
+  name: string
+  status: 'complete' | 'partial'
+  found: string[]
+  missing: string[]
 }
 
 interface Draft {
@@ -80,6 +96,16 @@ function toResult(b: Biomarker, d: Draft): LabResult | null {
   }
 }
 
+/** The draft value in the biomarker's canonical unit, or null if the unit can't be converted.
+ *  Uses the conversion the backend applied to the parsed value when the unit is unchanged. */
+function standardize(b: Biomarker, value: number, unit: string): number | null {
+  if (unit === (b.canonical_unit ?? '')) return value
+  if (unit === (b.unit ?? '') && b.value && b.value_std != null) return (value * b.value_std) / b.value
+  return null
+}
+
+const round = (x: number) => Number(x.toPrecision(4))
+
 /** Where the value sits relative to its reference range, as percentages of the bar. */
 function rangeGeometry(value: number | null, low: number | null, high: number | null) {
   if (low == null && high == null) return null
@@ -119,13 +145,27 @@ function RangeBar({ value, low, high, status }: { value: number | null; low: num
 
 interface Props {
   biomarkers: Biomarker[]
+  panels: Panel[]
   disabled: boolean
   onChange: () => void
   onConfirm: (corrected: LabResult[]) => void
 }
 
-function BiomarkerEditor({ biomarkers, disabled, onChange, onConfirm }: Props) {
+function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: Props) {
   const [drafts, setDrafts] = useState<Draft[]>(() => biomarkers.map(toDraft))
+  // Panels start open when they have missing tests or values to check.
+  const [open, setOpen] = useState<Set<string>>(
+    () =>
+      new Set(
+        panels
+          .filter((p) =>
+            biomarkers.some(
+              (b) => b.panel === p.id && (!b.found || b.suspect || !['normal', 'unknown'].includes(resultStatus(b))),
+            ),
+          )
+          .map((p) => p.id),
+      ),
+  )
   const errors = drafts.map(validate)
   const hasErrors = errors.some((e) => Object.keys(e).length > 0)
   const editedCount = biomarkers.filter((b, i) => isEdited(b, drafts[i])).length
@@ -133,6 +173,15 @@ function BiomarkerEditor({ biomarkers, disabled, onChange, onConfirm }: Props) {
   function update(i: number, patch: Partial<Draft>) {
     setDrafts((prev) => prev.map((d, j) => (j === i ? { ...d, ...patch } : d)))
     onChange()
+  }
+
+  function toggle(id: string, isOpen: boolean) {
+    setOpen((prev) => {
+      const next = new Set(prev)
+      if (isOpen) next.add(id)
+      else next.delete(id)
+      return next
+    })
   }
 
   function confirm() {
@@ -158,57 +207,89 @@ function BiomarkerEditor({ biomarkers, disabled, onChange, onConfirm }: Props) {
     )
   }
 
+  function card(b: Biomarker, i: number) {
+    const edited = isEdited(b, drafts[i])
+    const preview = toResult(b, drafts[i])
+    const status = preview ? resultStatus(preview) : 'unknown'
+    const std = preview?.value != null ? standardize(b, preview.value, preview.unit ?? '') : null
+    const [low, high] = b.plausible
+    const suspect = std != null && (std < low || std > high)
+    const converted = std != null && (preview?.unit ?? '') !== (b.canonical_unit ?? '')
+    return (
+      <div key={b.canonical} className={`biomarker status-${preview ? status : 'missing'}`}>
+        <div className="biomarker-head">
+          <div>
+            <div className="biomarker-name">{b.canonical}</div>
+            <div className="biomarker-source">
+              {b.found ? `“${b.test}” · page ${b.page}` : 'Not found in report'}
+            </div>
+          </div>
+          {preview ? <StatusPill status={status} /> : <span className="pill pill-missing">No value</span>}
+        </div>
+
+        <div className="biomarker-reading">
+          {field(i, 'value', 'Value', 'field-value')}
+          {field(i, 'unit', 'Unit', 'field-unit')}
+        </div>
+
+        {converted && (
+          <div className="biomarker-converted">
+            ≈ {round(std!)} {b.canonical_unit}
+          </div>
+        )}
+        {suspect && <div className="biomarker-suspect">⚠ Check this value — it's outside what's physically plausible</div>}
+
+        <RangeBar value={preview?.value ?? null} low={preview?.ref_low ?? null} high={preview?.ref_high ?? null} status={status} />
+
+        <div className="biomarker-ref">
+          {field(i, 'low', 'Ref low')}
+          <span className="ref-dash">–</span>
+          {field(i, 'high', 'Ref high')}
+        </div>
+
+        {edited && (
+          <div className="biomarker-edited">
+            <span className="edited-badge">Edited</span>
+            <button type="button" className="link" onClick={() => update(i, toDraft(b))}>
+              Reset to parsed
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <section className="card">
       <div className="card-head">
         <div>
-          <h2>Key biomarkers</h2>
+          <h2>Biomarkers by panel</h2>
           <p className="muted">Check these against your report and correct anything that was read incorrectly.</p>
         </div>
       </div>
       <fieldset disabled={disabled} className="plain">
-        <div className="biomarker-grid">
-          {biomarkers.map((b, i) => {
-            const edited = isEdited(b, drafts[i])
-            const preview = toResult(b, drafts[i])
-            const status = preview ? resultStatus(preview) : 'unknown'
-            return (
-              <div key={b.canonical} className={`biomarker status-${preview ? status : 'missing'}`}>
-                <div className="biomarker-head">
-                  <div>
-                    <div className="biomarker-name">{b.canonical}</div>
-                    <div className="biomarker-source">
-                      {b.found ? `“${b.test}” · page ${b.page}` : 'Not found in report'}
-                    </div>
-                  </div>
-                  {preview ? <StatusPill status={status} /> : <span className="pill pill-missing">No value</span>}
-                </div>
-
-                <div className="biomarker-reading">
-                  {field(i, 'value', 'Value', 'field-value')}
-                  {field(i, 'unit', 'Unit', 'field-unit')}
-                </div>
-
-                <RangeBar value={preview?.value ?? null} low={preview?.ref_low ?? null} high={preview?.ref_high ?? null} status={status} />
-
-                <div className="biomarker-ref">
-                  {field(i, 'low', 'Ref low')}
-                  <span className="ref-dash">–</span>
-                  {field(i, 'high', 'Ref high')}
-                </div>
-
-                {edited && (
-                  <div className="biomarker-edited">
-                    <span className="edited-badge">Edited</span>
-                    <button type="button" className="link" onClick={() => update(i, toDraft(b))}>
-                      Reset to parsed
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        {panels.length === 0 && <p className="muted">No standard test panels were recognized in this report.</p>}
+        {panels.map((panel) => {
+          const members = biomarkers.map((b, i) => [b, i] as const).filter(([b]) => b.panel === panel.id)
+          if (members.length === 0) return null
+          return (
+            <details
+              key={panel.id}
+              className="panel-group"
+              open={open.has(panel.id)}
+              onToggle={(e) => toggle(panel.id, e.currentTarget.open)}
+            >
+              <summary>
+                <span className="panel-name">{panel.name}</span>
+                <span className={`pill pill-panel-${panel.status}`}>
+                  {panel.status === 'complete' ? 'Complete' : `${panel.missing.length} not tested`}
+                </span>
+                <span className="muted small">{members.length} tests</span>
+              </summary>
+              <div className="biomarker-grid">{members.map(([b, i]) => card(b, i))}</div>
+            </details>
+          )
+        })}
         <div className="card-foot">
           <span className="muted">
             {editedCount > 0 ? `${editedCount} correction${editedCount > 1 ? 's' : ''} made` : 'No corrections made'}

@@ -65,14 +65,23 @@ def _describe(result):
     return f"- {name}: {value}{ref} — {result_status(result)}"
 
 
-def format_results(results):
+def format_panels(panels):
+    """"Complete Blood Count (complete); Iron Studies (not tested: Ferritin)" for the detected panels."""
+    return "; ".join(
+        p["name"] + (f" (not tested: {', '.join(p['missing'])})" if p["missing"] else " (complete)")
+        for p in panels
+    )
+
+
+def format_results(results, panels=()):
     """Out-of-range results listed in full first, so the model can't skip them."""
     def names(status):
         return ", ".join(r.get("canonical") or r.get("test") for r in results if result_status(r) == status)
 
     abnormal = [_describe(r) for r in results if result_status(r) not in ("normal", "unknown")]
     return (
-        f"Out-of-range results ({len(abnormal)}):\n" + ("\n".join(abnormal) or "None")
+        (f"Test panels in this report: {format_panels(panels)}\n\n" if panels else "")
+        + f"Out-of-range results ({len(abnormal)}):\n" + ("\n".join(abnormal) or "None")
         + "\n\nNormal results: " + (names("normal") or "None")
         + "\n\nResults with no reference range (do not call these normal or abnormal): "
         + (names("unknown") or "None")
@@ -80,7 +89,7 @@ def format_results(results):
     )
 
 
-def stream_summary(results):
+def stream_summary(results, panels=()):
     """Yield the summary text in chunks as the model generates it.
 
     The first chunk is requested eagerly so connection/model errors raise
@@ -90,7 +99,7 @@ def stream_summary(results):
         model=OLLAMA_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": format_results(results)},
+            {"role": "user", "content": format_results(results, panels)},
         ],
         stream=True,
         keep_alive="30m",

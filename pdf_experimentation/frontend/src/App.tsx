@@ -1,11 +1,32 @@
 import { useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
-import BiomarkerEditor, { type Biomarker, type LabResult } from './BiomarkerEditor'
+import BiomarkerEditor, { type Biomarker, type LabResult, type Panel } from './BiomarkerEditor'
 import { resultStatus, StatusPill, type Status } from './status'
 
 interface ParsedDocument {
   results: LabResult[]
   biomarkers: Biomarker[]
+  panels: Panel[]
+  features: { schema_version: number; values: Record<string, number | null> }
   unparsed: { line: string; page: number }[]
+}
+
+function PanelChips({ panels }: { panels: Panel[] }) {
+  if (panels.length === 0) return null
+  return (
+    <div className="panel-chips">
+      <span className="muted small">Panels detected</span>
+      {panels.map((p) => (
+        <span
+          key={p.id}
+          className={`chip chip-${p.status}`}
+          title={p.missing.length ? `Not tested: ${p.missing.join(', ')}` : 'All core tests present'}
+        >
+          {p.name}
+          {p.status === 'complete' ? ' ✓' : ` · ${p.missing.length} missing`}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 function Steps({ current }: { current: number }) {
@@ -95,6 +116,8 @@ function ResultsTable({ results }: { results: LabResult[] }) {
               <tr key={i}>
                 <td>
                   {r.canonical ?? r.test}
+                  {r.derived && <span className="tag">calculated</span>}
+                  {r.suspect && <span className="tag tag-warn" title="Outside what's physically plausible; may be misread">⚠ check</span>}
                   {r.canonical && r.canonical !== r.test && <div className="muted small">{r.test}</div>}
                 </td>
                 <td className="num">
@@ -132,9 +155,13 @@ function App() {
 
   async function summarize(corrected: LabResult[]) {
     if (!document) return
-    // Corrected key biomarkers replace their parsed versions.
+    // Corrected biomarkers replace their parsed versions. Derived values are left
+    // out: they may be stale after a correction, and the summary explains the report's own values.
     const keyNames = new Set(document.biomarkers.map((b) => b.canonical))
-    const results = [...corrected, ...document.results.filter((r) => !keyNames.has(r.canonical ?? ''))]
+    const results = [
+      ...corrected,
+      ...document.results.filter((r) => !keyNames.has(r.canonical ?? '') && !r.derived),
+    ]
     if (results.length === 0) {
       setSummaryError('No results to summarize.')
       return
@@ -145,7 +172,7 @@ function App() {
       const res = await fetch('http://localhost:5002/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ results }),
+        body: JSON.stringify({ results, panels: document.panels }),
       })
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}))
@@ -262,11 +289,13 @@ function App() {
 
         {document != null && (
           <>
-            <Overview results={document.results} />
+            <Overview results={document.results.filter((r) => !r.derived)} />
+            <PanelChips panels={document.panels} />
 
             <BiomarkerEditor
               key={uploadId}
               biomarkers={document.biomarkers}
+              panels={document.panels}
               disabled={summarizing}
               onChange={clearSummary}
               onConfirm={summarize}

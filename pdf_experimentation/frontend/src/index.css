@@ -222,6 +222,39 @@ button.link {
   background: var(--primary-soft); color: var(--primary);
 }
 
+.biomarker-converted { font-size: 0.78rem; color: var(--muted); margin-top: -0.4rem; font-variant-numeric: tabular-nums; }
+.biomarker-suspect {
+  font-size: 0.78rem; padding: 0.35rem 0.5rem; border-radius: 6px;
+  background: var(--high-soft); color: var(--high);
+}
+
+/* Panels */
+.panel-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.chip {
+  font-size: 0.78rem; padding: 0.2rem 0.65rem; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); white-space: nowrap;
+}
+.chip-complete { border-color: var(--normal); color: var(--normal); }
+.chip-partial { color: var(--muted); border-style: dashed; }
+.pill-panel-complete { background: var(--normal-soft); color: var(--normal); }
+.pill-panel-partial { background: var(--unknown-soft); color: var(--unknown); }
+.panel-group { border-top: 1px solid var(--border); padding: 0.75rem 0; }
+.panel-group:first-of-type { border-top: none; padding-top: 0; }
+.panel-group summary {
+  display: flex; align-items: center; gap: 0.6rem; cursor: pointer;
+  list-style: none; padding: 0.25rem 0;
+}
+.panel-group summary::-webkit-details-marker { display: none; }
+.panel-group summary::before { content: '▸'; color: var(--muted); transition: transform 0.15s; }
+.panel-group[open] summary::before { transform: rotate(90deg); }
+.panel-group[open] summary { margin-bottom: 0.75rem; }
+.panel-name { font-weight: 600; }
+.tag {
+  margin-left: 0.4rem; font-size: 0.68rem; font-weight: 600; padding: 0.05rem 0.4rem;
+  border-radius: 4px; background: var(--unknown-soft); color: var(--unknown); vertical-align: middle;
+}
+.tag-warn { background: var(--high-soft); color: var(--high); }
+
 /* Range bar */
 .range { padding: 0.2rem 0 1rem; }
 .range-track { position: relative; height: 8px; border-radius: 4px; background: var(--border); }

@@ -16,6 +16,19 @@
     "p16/p17 interpretation lines recorded as their own qualitative/text rows",
     "p19 Pus Cells '1-2' has no unit printed; Epithelial Cells reference printed as '.'"
   ],
+  "expected_panels": {
+    "cbc": {"status": "complete", "missing": []},
+    "differential": {"status": "complete", "missing": []},
+    "cmp": {"status": "partial", "missing": ["Carbon Dioxide", "Alkaline Phosphatase"]},
+    "lipid": {"status": "complete", "missing": []},
+    "liver": {"status": "partial", "missing": ["Alkaline Phosphatase", "GGT"]},
+    "kidney": {"status": "partial", "missing": ["eGFR"]},
+    "thyroid": {"status": "complete", "missing": []},
+    "diabetes": {"status": "complete", "missing": []},
+    "iron": {"status": "partial", "missing": ["Ferritin"]},
+    "vitamins": {"status": "partial", "missing": ["Folate"]},
+    "inflammation": {"status": "partial", "missing": ["CRP"]}
+  },
   "results": [
     {"page": 1, "section": "Complete Blood Count", "test": "Hemoglobin", "value": "14.5", "value_type": "numeric", "unit": "g/dL", "reference_range": "13.0 - 16.5", "flag": ""},
     {"page": 1, "section": "Complete Blood Count", "test": "RBC Count", "value": "4.79", "value_type": "numeric", "unit": "million/cmm", "reference_range": "4.5 - 5.5", "flag": ""},

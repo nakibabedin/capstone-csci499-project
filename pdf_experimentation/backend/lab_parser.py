@@ -17,6 +17,9 @@ from collections import Counter
 
 import pymupdf
 
+from biomarkers import BIOMARKERS
+from panels import derive, detect_panels, enrich, feature_vector, review_list
+
 # Text whose vertical centers are within this many points shares a line.
 LINE_TOLERANCE = 3.0
 # Text smaller than this fraction of a line's main font size is dropped from it
@@ -69,83 +72,6 @@ NORMAL_RANGE_LABELS = {
 PAGE_NUMBER_RE = re.compile(r"^page \d+( of \d+)?$", re.IGNORECASE)
 COLUMN_HEADER_WORDS = {"test", "result", "results", "flag", "units", "reference", "range", "interval"}
 
-# Canonical test name -> the spellings labs commonly use for it. Matching is
-# exact (after normalization) on purpose: fuzzy matching confuses pairs like
-# "HDL Cholesterol" and "LDL Cholesterol".
-CANONICAL_TESTS = {
-    # Complete blood count
-    "White Blood Cells": ["wbc", "wbc count", "total wbc count", "total leukocyte count", "tlc", "white blood cell count", "white blood cells", "leukocytes", "white blood count"],
-    "Red Blood Cells": ["rbc", "rbc count", "red blood cell count", "red blood cells", "erythrocytes", "red blood count"],
-    "Hemoglobin": ["hemoglobin", "hgb", "hb"],
-    "Hematocrit": ["hematocrit", "hct"],
-    "MCV": ["mcv", "mean corpuscular volume"],
-    "MCH": ["mch", "mean corpuscular hemoglobin"],
-    "MCHC": ["mchc", "mean corpuscular hemoglobin concentration"],
-    "RDW": ["rdw", "rdw cv", "red cell distribution width"],
-    "Platelets": ["platelets", "platelet count", "plt"],
-    "MPV": ["mpv", "mean platelet volume"],
-    "Neutrophils %": ["neutrophils", "neutrophils %", "neut %", "neutrophils percent"],
-    "Lymphocytes %": ["lymphs", "lymphocytes", "lymphocytes %", "lymph %"],
-    "Monocytes %": ["monocytes", "monocytes %", "mono %"],
-    "Eosinophils %": ["eos", "eosinophils", "eosinophils %", "eos %"],
-    "Basophils %": ["basos", "basophils", "basophils %", "baso %"],
-    "Neutrophils (Absolute)": ["neutrophils absolute", "absolute neutrophils", "neutrophils abs", "anc"],
-    "Lymphocytes (Absolute)": ["lymphocytes absolute", "absolute lymphocytes", "lymphs absolute", "lymphs abs"],
-    "Monocytes (Absolute)": ["monocytes absolute", "absolute monocytes", "monocytes abs"],
-    "Eosinophils (Absolute)": ["eosinophils absolute", "absolute eosinophils", "eos absolute", "eos abs"],
-    "Basophils (Absolute)": ["basophils absolute", "absolute basophils", "baso absolute", "basos absolute"],
-    # Metabolic panel
-    "Glucose": ["glucose", "glucose fasting", "fasting glucose", "glu", "fasting blood sugar", "fbs"],
-    "Urea": ["urea", "blood urea"],
-    "Uric Acid": ["uric acid"],
-    "BUN": ["bun", "urea nitrogen", "blood urea nitrogen", "urea nitrogen bun"],
-    "Creatinine": ["creatinine", "creat"],
-    "eGFR": ["egfr", "gfr", "estimated gfr", "egfr non afr american", "egfr if nonafricn am"],
-    "BUN/Creatinine Ratio": ["bun creatinine ratio", "bun creat ratio"],
-    "Sodium": ["sodium", "na"],
-    "Potassium": ["potassium", "k"],
-    "Chloride": ["chloride", "cl"],
-    "Carbon Dioxide": ["carbon dioxide", "co2", "bicarbonate", "carbon dioxide total"],
-    "Calcium": ["calcium", "ca"],
-    "Total Protein": ["protein total", "total protein", "protein"],
-    "Albumin": ["albumin"],
-    "Globulin": ["globulin", "globulin total"],
-    "Albumin/Globulin Ratio": ["a g ratio", "albumin globulin ratio"],
-    "Bilirubin, Total": ["bilirubin total", "total bilirubin", "bilirubin"],
-    "Alkaline Phosphatase": ["alkaline phosphatase", "alk phos", "alp"],
-    "AST": ["ast", "ast sgot", "sgot", "aspartate aminotransferase"],
-    "ALT": ["alt", "alt sgpt", "sgpt", "alanine aminotransferase"],
-    # Lipids
-    "Total Cholesterol": ["cholesterol", "cholesterol total", "total cholesterol"],
-    "HDL Cholesterol": ["hdl", "hdl cholesterol", "hdl c"],
-    "LDL Cholesterol": ["ldl", "ldl cholesterol", "ldl c", "ldl chol calc", "ldl chol calc nih", "ldl cholesterol calc", "direct ldl", "ldl direct"],
-    "Triglycerides": ["triglycerides", "triglyceride", "trig"],
-    "VLDL Cholesterol": ["vldl", "vldl cholesterol"],
-    "Non-HDL Cholesterol": ["non hdl cholesterol", "non hdl c"],
-    "Cholesterol/HDL Ratio": ["chol hdl ratio", "cholesterol hdl ratio", "t chol hdl ratio"],
-    # Diabetes, thyroid, vitamins, iron
-    "Hemoglobin A1c": ["hemoglobin a1c", "hba1c", "a1c", "glycohemoglobin"],
-    "TSH": ["tsh", "thyroid stimulating hormone", "tsh thyroid stimulating hormone"],
-    "Free T4": ["free t4", "t4 free", "t4 free direct", "thyroxine free"],
-    "Free T3": ["free t3", "t3 free"],
-    "Total T3": ["t3", "t3 total", "total t3", "t3 triiodothyronine", "triiodothyronine"],
-    "Total T4": ["t4", "t4 total", "total t4", "t4 thyroxine", "thyroxine"],
-    "Vitamin D, 25-Hydroxy": ["vitamin d", "vitamin d 25 hydroxy", "25 hydroxy vitamin d", "vitamin d 25 oh", "25 oh vitamin d"],
-    "Vitamin B12": ["vitamin b12", "b12", "cobalamin"],
-    "Folate": ["folate", "folic acid"],
-    "Iron": ["iron", "iron total"],
-    "Ferritin": ["ferritin"],
-    "Transferrin Saturation": ["transferrin saturation", "iron saturation"],
-    "ESR": ["esr", "erythrocyte sedimentation rate", "sed rate"],
-    "Homocysteine": ["homocysteine"],
-    "PSA": ["psa", "psa total", "prostate specific antigen", "psa prostate specific antigen total"],
-    "TIBC": ["tibc", "iron binding capacity", "total iron binding capacity"],
-}
-
-
-# The biomarkers pulled out of a report for the user to review and correct.
-KEY_BIOMARKERS = ["Glucose", "Hemoglobin A1c", "Total Cholesterol", "LDL Cholesterol", "Hemoglobin"]
-
 
 def _normalize_name(name):
     return " ".join(re.sub(r"[^a-z0-9%]+", " ", name.lower()).split())
@@ -156,10 +82,11 @@ def _strip_qualifiers(key):
     return " ".join(key.split())
 
 
+# Normalized spelling -> canonical name. Matching is exact on purpose (see biomarkers.py).
 ALIASES = {
     _normalize_name(alias): canonical
-    for canonical, aliases in CANONICAL_TESTS.items()
-    for alias in aliases + [canonical]
+    for canonical, biomarker in BIOMARKERS.items()
+    for alias in biomarker["aliases"] + [canonical]
 }
 
 
@@ -355,30 +282,17 @@ def _page_lines(page):
     return lines
 
 
-def extract_key_biomarkers(results):
-    """One entry per KEY_BIOMARKERS name, in order: the first matching result
-    (reports often repeat a test across panels), or an empty placeholder with
-    found=False so the user can still fill it in."""
-    biomarkers = []
-    for name in KEY_BIOMARKERS:
-        match = next((r for r in results if r["canonical"] == name), None)
-        if match is not None:
-            biomarkers.append({**match, "found": True})
-        else:
-            biomarkers.append({
-                "test": name, "canonical": name, "value": None, "value_text": None,
-                "unit": None, "flag": None, "reference_range": None,
-                "ref_low": None, "ref_high": None, "found": False,
-            })
-    return biomarkers
-
-
 def parse_lab_report(contents, max_pages):
     """Parse a PDF's bytes into lab results.
 
-    Returns (report, num_pages), where report holds the parsed `results`,
-    the `biomarkers` from KEY_BIOMARKERS, and `unparsed` lines that contain both letters and digits but didn't
-    match a result row (useful for spotting layouts the rules miss).
+    Returns (report, num_pages), where report holds:
+      results   - parsed results, enriched with canonical-unit values (see panels.py),
+                  plus derived results marked `derived`
+      panels    - the test panels detected, with their missing tests
+      biomarkers - the detected panels' tests for the user to review and correct
+      features  - one canonical-unit value per known biomarker, for models
+      unparsed  - lines that contain both letters and digits but didn't match a
+                  result row (useful for spotting layouts the rules miss)
     report is None if the PDF has no extractable text (e.g. a scanned image).
     """
     with pymupdf.open(stream=contents, filetype="pdf") as pdf:
@@ -406,6 +320,14 @@ def parse_lab_report(contents, max_pages):
             elif re.search(r"[A-Za-z]", line) and re.search(r"\d", line):
                 unparsed.append({"line": line, "page": page_num})
 
-    report = {"results": results, "biomarkers": extract_key_biomarkers(results), "unparsed": unparsed}
+    results = derive(enrich(results))
+    panels = detect_panels(results)
+    report = {
+        "results": results,
+        "panels": panels,
+        "biomarkers": review_list(results, panels),
+        "features": feature_vector(results),
+        "unparsed": unparsed,
+    }
     return report, len(pages)
 
