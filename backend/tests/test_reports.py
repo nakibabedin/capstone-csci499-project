@@ -82,7 +82,8 @@ def test_panel_summary_errors(client):
 def test_panel_summary_streams_only_that_panels_results(client, monkeypatch):
     seen = {}
 
-    def fake_stream(analysis, results):
+    def fake_stream(analysis, results, patient):
+        seen["patient"] = patient
         seen.update(panel=analysis["id"], tests=[r["canonical"] for r in results])
         return iter(["TSH is ", "in range."])
 
@@ -91,4 +92,24 @@ def test_panel_summary_streams_only_that_panels_results(client, monkeypatch):
                {"test": "Glucose", "canonical": "Glucose", "value": 90, "value_text": "90", "unit": "mg/dL"}]
     res = client.post("/api/panels/thyroid/summarize", json={"results": results})
     assert res.status_code == 200 and res.get_data(as_text=True) == "TSH is in range."
-    assert seen == {"panel": "thyroid", "tests": ["TSH"]}
+    assert seen == {"panel": "thyroid", "tests": ["TSH"], "patient": {"age": None, "sex": None}}
+
+
+@pytest.mark.parametrize("patient, expected", [
+    ({"age": 41, "sex": "male"}, {"age": 41, "sex": "male"}),
+    ({"age": "41", "sex": "M"}, {"age": None, "sex": None}),
+    ({"age": 300, "sex": "female"}, {"age": None, "sex": "female"}),
+    ({"age": True}, {"age": None, "sex": None}),
+    (None, {"age": None, "sex": None}),
+])
+def test_patient_is_validated_and_passed_to_the_analysis(client, monkeypatch, patient, expected):
+    seen = {}
+
+    def fake_analyses(results, patient):
+        seen["patient"] = patient
+        return []
+
+    monkeypatch.setattr("reports.available_analyses", fake_analyses)
+    tsh = [{"test": "TSH", "canonical": "TSH", "value": 2.5, "value_text": "2.5", "unit": "uIU/mL"}]
+    assert client.post("/api/analyze", json={"results": tsh, "patient": patient}).status_code == 200
+    assert seen["patient"] == expected

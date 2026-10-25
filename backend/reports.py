@@ -57,12 +57,21 @@ def _corrected_results():
     return derive(enrich([r for r in results if not r.get("derived")]))
 
 
+def _patient():
+    """The request's `patient` age and sex, with anything missing or invalid as None."""
+    patient = (request.get_json(silent=True) or {}).get("patient")
+    patient = patient if isinstance(patient, dict) else {}
+    age, sex = patient.get("age"), patient.get("sex")
+    valid_age = isinstance(age, (int, float)) and not isinstance(age, bool) and 0 <= age <= 120
+    return {"age": age if valid_age else None, "sex": sex if sex in ("male", "female") else None}
+
+
 @reports_bp.route("/analyze", methods=["POST"])
 def analyze():
     results = _corrected_results()
     if not results:
         return jsonify({"error": "No results to analyze."}), 400
-    return jsonify({"analyses": available_analyses(results)})
+    return jsonify({"analyses": available_analyses(results, _patient())})
 
 
 # --- Stream a plain-language summary of one panel from Ollama ---
@@ -74,14 +83,15 @@ def summarize_panel(panel_id):
     results = _corrected_results()
     if not results:
         return jsonify({"error": "No results to summarize."}), 400
-    analysis = next((a for a in available_analyses(results) if a["id"] == panel_id), None)
+    patient = _patient()
+    analysis = next((a for a in available_analyses(results, patient) if a["id"] == panel_id), None)
     if analysis is None:
         return jsonify({"error": "Not enough of this panel's tests are in the report to summarize it."}), 400
     inputs = PANELS[panel_id]["inputs"]
     panel_results = [r for r in results if r.get("canonical") in inputs and not r.get("derived")]
 
     try:
-        chunks = stream_panel_summary(analysis, panel_results)
+        chunks = stream_panel_summary(analysis, panel_results, patient)
     except ConnectionError:
         return jsonify({"error": "Could not reach Ollama. Is `ollama serve` running?"}), 503
     except ollama.ResponseError as e:

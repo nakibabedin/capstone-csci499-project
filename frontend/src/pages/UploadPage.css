@@ -183,6 +183,18 @@
   background: var(--high-soft); color: var(--high);
 }
 
+/* Patient */
+.analyzer .patient-fields {
+  display: grid; grid-template-columns: 140px 180px 1fr; gap: 0.75rem; align-items: end;
+  padding-bottom: 1rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border);
+}
+.analyzer .patient-fields select {
+  width: 100%; font: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.5rem;
+}
+.analyzer .patient-fields p { padding-bottom: 0.45rem; }
+@media (max-width: 640px) { .analyzer .patient-fields { grid-template-columns: 1fr 1fr; } .analyzer .patient-fields p { grid-column: 1 / -1; } }
+
 /* Panels */
 .analyzer .panel-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .analyzer .chip {

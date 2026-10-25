@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { Patient } from '../api/reports'
 import { resultStatus, StatusPill, type Status } from './status'
 
 export interface LabResult {
@@ -195,13 +196,23 @@ function RangeBar({ value, low, high, status }: { value: number | null; low: num
 interface Props {
   biomarkers: Biomarker[]
   panels: Panel[]
+  patient: Patient
   disabled: boolean
   onChange: () => void
-  onConfirm: (corrected: LabResult[]) => void
+  onConfirm: (corrected: LabResult[], patient: Patient) => void
 }
 
-function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: Props) {
+function validateAge(age: string): string | undefined {
+  if (!age.trim()) return undefined
+  const n = Number(age)
+  return NUMBER_RE.test(age.trim()) && n <= 120 ? undefined : 'Enter an age in years, 0–120'
+}
+
+function BiomarkerEditor({ biomarkers, panels, patient, disabled, onChange, onConfirm }: Props) {
   const [drafts, setDrafts] = useState<Draft[]>(() => biomarkers.map(toDraft))
+  const [age, setAge] = useState(patient.age?.toString() ?? '')
+  const [sex, setSex] = useState<Patient['sex']>(patient.sex)
+  const ageError = validateAge(age)
   // Panels start open when they have missing tests or values to check.
   const [open, setOpen] = useState<Set<string>>(
     () =>
@@ -216,7 +227,7 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
       ),
   )
   const errors = drafts.map((d, i) => validate(biomarkers[i], d))
-  const hasErrors = errors.some((e) => Object.keys(e).length > 0)
+  const hasErrors = errors.some((e) => Object.keys(e).length > 0) || ageError != null
   const editedCount = biomarkers.filter((b, i) => isEdited(b, drafts[i])).length
 
   function update(i: number, patch: Partial<Draft>) {
@@ -237,7 +248,7 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
     const corrected = biomarkers
       .map((b, i) => toResult(b, drafts[i]))
       .filter((r): r is LabResult => r !== null)
-    onConfirm(corrected)
+    onConfirm(corrected, { age: age.trim() ? Number(age) : null, sex, source: patient.source })
   }
 
   function field(i: number, key: keyof Draft, label: string, className = '', list?: string) {
@@ -334,6 +345,40 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
         </div>
       </div>
       <fieldset disabled={disabled} className="plain">
+        <div className="patient-fields">
+          <label className="field">
+            <span className="field-label">Age (years)</span>
+            <input
+              value={age}
+              placeholder="—"
+              inputMode="decimal"
+              onChange={(e) => {
+                setAge(e.target.value)
+                onChange()
+              }}
+              className={ageError ? 'invalid' : ''}
+            />
+            {ageError && <span className="field-error">{ageError}</span>}
+          </label>
+          <label className="field">
+            <span className="field-label">Sex</span>
+            <select
+              value={sex ?? ''}
+              onChange={(e) => {
+                setSex((e.target.value || null) as Patient['sex'])
+                onChange()
+              }}
+            >
+              <option value="">Not specified</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+          </label>
+          <p className="muted small">
+            {patient.source ? `Read from “${patient.source}”. ` : 'Not found in the report. '}
+            Some calculations, like eGFR and biological age, need these.
+          </p>
+        </div>
         {panels.length === 0 && <p className="muted">No standard test panels were recognized in this report.</p>}
         {panels.map((panel) => {
           const members = biomarkers.map((b, i) => [b, i] as const).filter(([b]) => b.panel === panel.id)

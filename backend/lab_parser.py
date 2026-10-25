@@ -81,6 +81,18 @@ NORMAL_RANGE_LABELS = {
 PAGE_NUMBER_RE = re.compile(r"^page \d+( of \d+)?$", re.IGNORECASE)
 COLUMN_HEADER_WORDS = {"test", "result", "results", "flag", "units", "reference", "range", "interval"}
 
+# Patient age and sex as report headers print them:
+# "Sex/Age : Male / 41 Y", "Age/Sex: 41 Yrs / F", "Age : 41 Years", "Gender : Female".
+SEX = r"(?P<sex>male|female|m|f)\b"
+AGE = r"(?P<age>\d{1,3}(?:\.\d+)?)\s*(?P<age_unit>y|yrs?|years?|m|mths?|months?|d|days?)?\b"
+PATIENT_PATTERNS = [
+    re.compile(rf"\b(?:sex|gender)\s*/\s*age\s*:?\s*{SEX}\s*/\s*{AGE}", re.IGNORECASE),
+    re.compile(rf"\bage\s*/\s*(?:sex|gender)\s*:?\s*{AGE}\s*/\s*{SEX}", re.IGNORECASE),
+    re.compile(rf"\bage\s*(?:\(\s*years?\s*\))?\s*:\s*{AGE}", re.IGNORECASE),
+    re.compile(rf"\b(?:sex|gender)\s*:\s*{SEX}", re.IGNORECASE),
+]
+AGE_UNIT_YEARS = {"m": 1 / 12, "mth": 1 / 12, "mths": 1 / 12, "month": 1 / 12, "months": 1 / 12, "d": 1 / 365, "day": 1 / 365, "days": 1 / 365}
+
 
 def _normalize_name(name):
     return " ".join(re.sub(r"[^a-z0-9%]+", " ", name.lower()).split())
@@ -375,6 +387,32 @@ def _page_lines(page):
     return lines
 
 
+def extract_patient(pages):
+    """The patient's age (years) and sex from the report header, each None if not printed.
+
+    Searches the raw page lines, since headers repeat on every page and are
+    dropped as boilerplate before results are parsed.
+    """
+    patient = {"age": None, "sex": None, "source": None}
+    for line in (line for lines in pages for line in lines):
+        for pattern in PATIENT_PATTERNS:
+            match = pattern.search(line)
+            if not match:
+                continue
+            groups = match.groupdict()
+            if patient["sex"] is None and groups.get("sex"):
+                patient["sex"] = "male" if groups["sex"].lower().startswith("m") else "female"
+                patient["source"] = patient["source"] or line
+            if patient["age"] is None and groups.get("age"):
+                age = float(groups["age"]) * AGE_UNIT_YEARS.get((groups.get("age_unit") or "y").lower(), 1)
+                if 0 <= age <= 120:
+                    patient["age"] = round(age, 1) if age < 2 else int(age)
+                    patient["source"] = patient["source"] or line
+        if patient["age"] is not None and patient["sex"] is not None:
+            break
+    return patient
+
+
 def parse_lab_report(contents, max_pages):
     """Parse a PDF's bytes into lab results.
 
@@ -383,8 +421,9 @@ def parse_lab_report(contents, max_pages):
                   plus derived results marked `derived`
       panels    - the test panels detected, with their missing tests
       biomarkers - the detected panels' tests for the user to review and correct
-      analyses  - a per-panel analysis (model inputs, findings, indices) for every
-                  panel with enough tests present (see analysis.py)
+      patient   - the patient's age and sex from the report header (see extract_patient)
+      analyses  - a per-panel analysis (model inputs, findings, indices, models) for
+                  every panel with enough tests present (see analysis.py)
       unparsed  - lines that contain both letters and digits but didn't match a
                   result row (useful for spotting layouts the rules miss)
     report is None if the PDF has no extractable text (e.g. a scanned image).
@@ -393,6 +432,8 @@ def parse_lab_report(contents, max_pages):
         pages = [_page_lines(page) for page in pdf.pages(0, min(max_pages, pdf.page_count))]
     if not any(pages):
         return None, len(pages)
+
+    patient = extract_patient(pages)
 
     # Lines repeated on most pages are headers/footers (patient info, lab address).
     boilerplate = set()
@@ -420,7 +461,8 @@ def parse_lab_report(contents, max_pages):
         "results": results,
         "panels": panels,
         "biomarkers": review_list(results, panels),
-        "analyses": available_analyses(results),
+        "patient": patient,
+        "analyses": available_analyses(results, patient),
         "unparsed": unparsed,
     }
     return report, len(pages)

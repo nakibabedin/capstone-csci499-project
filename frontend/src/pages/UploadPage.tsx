@@ -1,5 +1,5 @@
 import { useState, type DragEvent, type FormEvent } from 'react'
-import { analyze, uploadReport, type PanelAnalysis, type ParsedDocument } from '../api/reports'
+import { analyze, uploadReport, type PanelAnalysis, type ParsedDocument, type Patient } from '../api/reports'
 import BiomarkerEditor, { type LabResult, type Panel } from '../components/BiomarkerEditor'
 import PanelAnalysisCard from '../components/PanelAnalysis'
 import { resultStatus, StatusPill, type Status } from '../components/status'
@@ -110,7 +110,7 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   // The confirmed (possibly corrected) results and the panel analyses computed from them.
-  const [confirmed, setConfirmed] = useState<{ results: LabResult[]; analyses: PanelAnalysis[] } | null>(null)
+  const [confirmed, setConfirmed] = useState<{ results: LabResult[]; patient: Patient; analyses: PanelAnalysis[] } | null>(null)
   const [analyzeError, setAnalyzeError] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   // Bumped on each upload so the editor starts fresh from the new parse,
@@ -123,7 +123,7 @@ export default function UploadPage() {
     setAnalyzeError(null)
   }
 
-  async function confirm(corrected: LabResult[]) {
+  async function confirm(corrected: LabResult[], patient: Patient) {
     if (!document) return
     // Corrected biomarkers replace their parsed versions. Derived values are left
     // out: they may be stale after a correction, so the backend recomputes them.
@@ -139,7 +139,7 @@ export default function UploadPage() {
     clearAnalysis()
     setAnalyzing(true)
     try {
-      setConfirmed({ results, analyses: await analyze(results) })
+      setConfirmed({ results, patient, analyses: await analyze(results, patient) })
       setConfirmId((id) => id + 1)
     } catch (err) {
       setAnalyzeError(err instanceof TypeError ? 'Could not reach the server while analyzing.' : (err as Error).message)
@@ -233,6 +233,7 @@ export default function UploadPage() {
             key={uploadId}
             biomarkers={document.biomarkers}
             panels={document.panels}
+            patient={document.patient}
             disabled={analyzing}
             onChange={clearAnalysis}
             onConfirm={confirm}
@@ -249,7 +250,12 @@ export default function UploadPage() {
             <p className="muted">None of this report's panels have enough tests to analyze.</p>
           )}
           {confirmed.analyses.map((a) => (
-            <PanelAnalysisCard key={`${confirmId}-${a.id}`} analysis={a} results={confirmed.results} />
+            <PanelAnalysisCard
+              key={`${confirmId}-${a.id}`}
+              analysis={a}
+              results={confirmed.results}
+              patient={confirmed.patient}
+            />
           ))}
         </>
       )}

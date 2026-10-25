@@ -29,10 +29,19 @@ export interface PanelAnalysis {
   model: Record<string, unknown> | null
 }
 
+/** Age (years) and sex from the report header, confirmed or corrected by the user. */
+export interface Patient {
+  age: number | null
+  sex: 'male' | 'female' | null
+  /** The header line they were read from. */
+  source?: string | null
+}
+
 export interface ParsedDocument {
   results: LabResult[]
   biomarkers: Biomarker[]
   panels: Panel[]
+  patient: Patient
   analyses: PanelAnalysis[]
   unparsed: { line: string; page: number }[]
 }
@@ -59,12 +68,12 @@ export async function uploadReport(file: File): Promise<ParsedDocument> {
 }
 
 /** Re-analyzes every panel from (possibly user-corrected) results. */
-export async function analyze(results: LabResult[]): Promise<PanelAnalysis[]> {
-  const { analyses } = await postJson<{ analyses: PanelAnalysis[] }>('/analyze', json({ results }))
+export async function analyze(results: LabResult[], patient: Patient): Promise<PanelAnalysis[]> {
+  const { analyses } = await postJson<{ analyses: PanelAnalysis[] }>('/analyze', json({ results, patient }))
   return analyses
 }
 
 /** Returns the raw response so the caller can stream the panel's plain-text summary. */
-export function summarizePanel(panelId: string, results: LabResult[]): Promise<Response> {
-  return fetch(`/api/panels/${encodeURIComponent(panelId)}/summarize`, { method: 'POST', ...json({ results }) })
+export function summarizePanel(panelId: string, results: LabResult[], patient: Patient): Promise<Response> {
+  return fetch(`/api/panels/${encodeURIComponent(panelId)}/summarize`, { method: 'POST', ...json({ results, patient }) })
 }

@@ -202,10 +202,11 @@ def _model(panel_id, inputs):
         return {"error": str(e)}
 
 
-def available_analyses(results):
+def available_analyses(results, patient=None):
     """An analysis for every panel with enough of its tests present, in PANELS order.
 
     `results` are enriched (and usually derived) results; see panels.enrich and derive.
+    `patient` is {"age": years or None, "sex": "male" | "female" | None}.
     """
     first = _first_results(results)
     found = {name for name, r in first.items() if not r.get("derived")}

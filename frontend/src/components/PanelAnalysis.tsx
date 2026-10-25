@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { summarizePanel, type PanelAnalysis } from '../api/reports'
+import { summarizePanel, type PanelAnalysis, type Patient } from '../api/reports'
 import type { LabResult } from './BiomarkerEditor'
 import { StatusPill } from './status'
 
@@ -33,12 +33,13 @@ function SummaryText({ text }: { text: string }) {
 
 interface Props {
   analysis: PanelAnalysis
-  /** The results the analysis was computed from, sent along for the summary. */
+  /** The results and patient the analysis was computed from, sent along for the summary. */
   results: LabResult[]
+  patient: Patient
 }
 
 /** One panel's findings, indices and model output, with an on-demand AI summary. */
-export default function PanelAnalysisCard({ analysis, results }: Props) {
+export default function PanelAnalysisCard({ analysis, results, patient }: Props) {
   const [summary, setSummary] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [summarizing, setSummarizing] = useState(false)
@@ -49,7 +50,7 @@ export default function PanelAnalysisCard({ analysis, results }: Props) {
     setError(null)
     setSummarizing(true)
     try {
-      const res = await summarizePanel(analysis.id, results)
+      const res = await summarizePanel(analysis.id, results, patient)
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}))
         setError(data.error ?? 'Failed to generate a summary.')
