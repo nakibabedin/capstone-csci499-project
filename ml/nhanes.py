@@ -32,7 +32,13 @@ URL = "https://wwwn.cdc.gov/Nchs/Data/Nhanes/Public/{year}/DataFiles/{name}.xpt"
 PRE_PANDEMIC = {
     "year": 2017,
     "files": ["P_DEMO", "P_CBC", "P_BIOPRO", "P_HSCRP", "P_GHB", "P_GLU", "P_INS", "P_TCHOL", "P_HDL",
-              "P_TRIGLY", "P_FERTIN", "P_FETIB", "P_HEPBD", "P_HEPC", "P_ALB_CR", "P_TST", "P_BMX", "P_LUX"],
+              "P_TRIGLY", "P_FERTIN", "P_FETIB", "P_HEPBD", "P_HEPC", "P_ALB_CR", "P_TST", "P_BMX", "P_DIQ", "P_LUX"],
+}
+
+# August 2021–August 2023 (suffix _L): a later, independent sample for external validation.
+AUG_2021_2023 = {
+    "year": 2021,
+    "files": ["DEMO_L", "CBC_L", "BIOPRO_L", "GHB_L", "TCHOL_L", "HDL_L", "TRIGLY_L", "BMX_L", "DIQ_L", "LUX_L"],
 }
 
 # NHANES unit spellings units.normalize_unit doesn't know.
@@ -48,6 +54,12 @@ NHANES_UNITS = {
 # encoding analysis.py gives word answers (1 = abnormal).
 CODED = {
     "LBDHBG": {1: 1, 2: 0},  # Hepatitis B surface antigen: 1 positive, 2 negative
+}
+
+
+# Variables NHANES renamed in later cycles: registry name -> later names to try.
+RENAMED = {
+    "LBXTR": ["LBXTLG"],  # triglycerides, 2021–2023
 }
 
 
@@ -95,6 +107,8 @@ def registry_mapping(labels):
         var = biomarker["nhanes"]
         if not var:
             continue
+        if var not in labels:
+            var = next((alt for alt in RENAMED.get(var, []) if alt in labels), var)
         file, label = labels.get(var, (None, None))
         unit = label_unit(label)
         conversion = biomarker["conversions"].get(unit) if unit else None
@@ -151,6 +165,29 @@ def demographics(df):
         "sex": df["RIAGENDR"].map({1: "male", 2: "female"}),
         "race_ethnicity": df["RIDRETH3"].map({1: "Mexican American", 2: "Other Hispanic", 3: "Non-Hispanic White",
                                               4: "Non-Hispanic Black", 6: "Non-Hispanic Asian", 7: "Other/Multiracial"}),
-        # Exam weights for the pre-pandemic cycle; use them for population estimates.
-        "weight": df["WTMECPRP"],
+        # Exam weights (named per cycle); use them for population estimates.
+        "weight": df["WTMECPRP"] if "WTMECPRP" in df else df["WTMEC2YR"],
     }, index=df.index)
+
+
+def build_adults(cycle=PRE_PANDEMIC):
+    """Adults (18+) with an exam: demographics, every mapped biomarker in registry units
+    (plus derived values), liver elastography, and body measures. Also returns the
+    registry mapping for that cycle."""
+    raw, labels = load_cycle(cycle)
+    mapping = registry_mapping(labels)
+    values = add_derived(to_registry(raw, mapping))
+    extra = pd.DataFrame({
+        # Elastography: complete exam (status 1); CAP = liver fat, stiffness = scarring.
+        "elastography_complete": raw["LUAXSTAT"] == 1,
+        "cap_dbm": raw["LUXCAPM"],
+        "stiffness_kpa": raw["LUXSMED"],
+        "stiffness_iqr_ratio": raw["LUXSIQRM"],  # IQR / median, in percent
+        "bmi": raw["BMXBMI"],
+        "waist_cm": raw["BMXWAIST"],
+        # Doctor-diagnosed diabetes (DIQ010: 1 yes, 2 no, 3 borderline).
+        "diabetes": raw["DIQ010"].map({1: 1, 2: 0, 3: 0}),
+    }, index=raw.index)
+    adults = pd.concat([raw[["SEQN"]], demographics(raw), values, extra], axis=1)
+    adults = adults[(adults["age"] >= 18) & adults["weight"].gt(0)].reset_index(drop=True)
+    return adults, mapping
