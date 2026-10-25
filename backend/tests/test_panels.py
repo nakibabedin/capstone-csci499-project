@@ -1,5 +1,5 @@
 from biomarkers import BIOMARKERS, PANELS
-from panels import derive, detect_panels, enrich, feature_vector, review_list
+from panels import derive, detect_panels, enrich, review_list
 
 
 def result(canonical, value, unit=None, section=None, **extra):
@@ -59,10 +59,9 @@ def test_differential_absolute_count_is_relabelled_by_unit():
     assert r["value_std"] == 7.716
 
 
-def test_implausible_value_is_suspect_and_kept_out_of_features():
+def test_implausible_value_is_suspect():
     results = enrich([result("Glucose", 9500)])
     assert results[0]["suspect"]
-    assert feature_vector(results)["values"]["Glucose"] is None
 
 
 def test_derived_values():
@@ -96,8 +95,25 @@ def test_review_list_has_placeholders_for_missing_and_dedups_across_panels():
     assert {b["panel"] for b in items} == {"cmp", "diabetes"}
 
 
-def test_feature_vector_covers_every_biomarker_in_order():
-    features = feature_vector(enrich([result("Hemoglobin", 145, unit="g/L")]))
-    assert list(features["values"]) == list(BIOMARKERS)
-    assert features["values"]["Hemoglobin"] == 14.5
-    assert features["values"]["Glucose"] is None
+def test_word_answer_status():
+    from status import result_status
+    reactive, negative, group = enrich([
+        {**result("HIV Ab/Ag", None, unit=""), "value_text": "Reactive"},
+        {**result("Urine Protein", None, unit=""), "value_text": "Negative"},
+        {**result("ABO Type", None, unit=""), "value_text": "O"},
+    ])
+    assert [result_status(r) for r in (reactive, negative, group)] == ["ABNORMAL", "normal", "unknown"]
+
+
+def test_new_panels_are_detected_from_their_own_tests():
+    found = {p["id"]: p for p in detect_panels(enrich([
+        result("PT", 13.0), result("INR", 1.1),
+        result("Testosterone", 500),
+        result("CEA", 2.1),
+        result("Amylase", 60),
+    ]))}
+    assert found["coagulation"]["missing"] == ["aPTT"]
+    assert found["reproductive"]["status"] == "complete" and found["reproductive"]["found"] == ["Testosterone"]
+    assert found["tumor_markers"]["found"] == ["CEA"]
+    assert found["pancreas"]["missing"] == ["Lipase"]
+    assert "cardiac" not in found and "adrenal" not in found

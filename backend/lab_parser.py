@@ -10,6 +10,10 @@ the shape of a result row:
 where the unit and reference range may come in either order. A line only
 counts as a result if its value is followed by a unit or a reference range,
 which keeps page headers, addresses and phone numbers out of the results.
+
+Rows whose result is a word ("HBsAg Non Reactive", "Urine Ketone Absent Absent")
+are only accepted for tests that list that word among their answers (see
+biomarkers.py), for the same reason.
 """
 
 import re
@@ -17,8 +21,9 @@ from collections import Counter
 
 import pymupdf
 
-from biomarkers import BIOMARKERS
-from panels import derive, detect_panels, enrich, feature_vector, review_list
+from biomarkers import BIOMARKERS, normalize_answer
+from analysis import available_analyses
+from panels import derive, detect_panels, enrich, review_list
 
 # Text whose vertical centers are within this many points shares a line.
 LINE_TOLERANCE = 3.0
@@ -32,6 +37,10 @@ RANGE_RE = re.compile(
     rf"^(?P<low>{NUMBER})-(?P<high>{NUMBER})$|^(?P<cmp>[<>]=?|≤|≥)(?P<bound>{NUMBER})$"
 )
 DATE_RE = re.compile(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$")
+# Cells per microscope field: "3" or "1-2".
+COUNT_RE = re.compile(r"^(\d+)(?:-(\d+))?$")
+# The longest test name the word-answer pass tries ("HIV I & II Ab/Ag with P24 Ag").
+MAX_NAME_TOKENS = 8
 # "12.0 - 16.0" -> "12.0-16.0" and "< 100" -> "<100" so each range is one token.
 SPACED_RANGE_RE = re.compile(rf"({NUMBER})\s*[-–]\s*({NUMBER})")
 SPACED_BOUND_RE = re.compile(r"([<>]=?|≤|≥)\s+(?=[\d.])")
@@ -49,7 +58,7 @@ FLAGS = {
 }
 # Flags some labs print between the test name and the value.
 LEADING_FLAGS = {"H", "HH", "L", "LL", "HIGH", "LOW"}
-UNIT_WORDS = {"%", "fl", "pg", "g", "sec", "seconds", "mmhg", "units", "iu", "u"}
+UNIT_WORDS = {"%", "fl", "pg", "g", "sec", "secs", "seconds", "mmhg", "units", "iu", "u", "index", "coi"}
 
 # Lines whose "name" starts with one of these are patient/lab metadata, not results.
 METADATA_WORDS = {
@@ -139,14 +148,98 @@ def _looks_like_prose(tokens):
     )
 
 
+def _clean_line(line):
+    line = SPLIT_UNIT_RE.sub(r"\1", UP_TO_RE.sub("<=", line))
+    return SPACED_BOUND_RE.sub(r"\1", SPACED_RANGE_RE.sub(r"\1-\2", line))
+
+
 def parse_result_line(line):
     """Parse one text line into a list of result dicts (empty if it isn't a result row).
+
+    Numeric rows are tried first; a row whose result is a word ("Non Reactive")
+    is only accepted for a test that lists that word among its answers.
+    """
+    line = _clean_line(line)
+    return _parse_numeric_line(line) or _parse_answer_line(line)
+
+
+def _match_answer(tokens, answers, allow_count):
+    """(text, token count) of the longest known answer starting tokens, or None.
+
+    Urine microscopy reports cells per field as a count or range ("1-2"), which
+    `allow_count` accepts as well.
+    """
+    for n in range(min(4, len(tokens)), 0, -1):
+        text = " ".join(tokens[:n])
+        if normalize_answer(text) in answers:
+            return text, n
+    if allow_count and tokens and COUNT_RE.match(tokens[0]):
+        return tokens[0], 1
+    return None
+
+
+def _parse_answer_line(line):
+    """A row whose result is a word: "Rh (D) Type Positive", "Urine Glucose Present (+) Absent".
+
+    The name must resolve to a test with `answers` and the value must be one of
+    them, so a sentence that merely contains "negative" can't become a result.
+    After the value only a unit and a reference (an answer or a range) may follow.
+    """
+    tokens = [t for t in line.split() if t != ":"]
+    if len(tokens) < 2 or _looks_like_prose(tokens):
+        return []
+    for k in range(1, min(MAX_NAME_TOKENS, len(tokens) - 1) + 1):
+        name = " ".join(tokens[:k]).strip(" :.-")
+        canonical = canonical_name(name)
+        biomarker = BIOMARKERS.get(canonical)
+        if biomarker is None or not biomarker["answers"]:
+            continue
+        allow_count = biomarker["unit"] == "/hpf"
+        value = _match_answer(tokens[k:], biomarker["answers"], allow_count)
+        if value is None:
+            continue
+        value_text, n = value
+        rest = tokens[k + n:]
+        unit = rest.pop(0) if rest and _is_unit(rest[0]) else None
+
+        reference_range = ref_low = ref_high = None
+        ref = RANGE_RE.match(rest[0]) if len(rest) == 1 else None
+        if ref and ref["low"] is not None:
+            reference_range, ref_low, ref_high = ref.group(0), _to_float(ref["low"]), _to_float(ref["high"])
+        elif ref:
+            reference_range = ref.group(0)
+            if ref["cmp"] in ("<", "<=", "≤"):
+                ref_high = _to_float(ref["bound"])
+            else:
+                ref_low = _to_float(ref["bound"])
+        elif rest and rest != ["."]:
+            ref_answer = _match_answer(rest, biomarker["answers"], allow_count)
+            if ref_answer is None or ref_answer[1] != len(rest):
+                continue  # something else follows the value; not a result row
+            reference_range = ref_answer[0]
+
+        count = COUNT_RE.match(value_text)
+        return [{
+            "test": name,
+            "canonical": canonical,
+            # A count range ("1-2" cells) is compared by its upper end.
+            "value": _to_float(count[2] or count[1]) if count else None,
+            "value_text": value_text,
+            "unit": unit,
+            "flag": None,
+            "reference_range": reference_range,
+            "ref_low": ref_low,
+            "ref_high": ref_high,
+        }]
+    return []
+
+
+def _parse_numeric_line(line):
+    """A row whose result is a number.
 
     A line holds two results when a differential count prints the percentage and
     the absolute count side by side: "Neutrophils 73 % 40-80 7716 /cmm 2000-6700".
     """
-    line = SPLIT_UNIT_RE.sub(r"\1", UP_TO_RE.sub("<=", line))
-    line = SPACED_BOUND_RE.sub(r"\1", SPACED_RANGE_RE.sub(r"\1-\2", line))
     tokens = line.split()
 
     for i in range(1, len(tokens)):
@@ -290,7 +383,8 @@ def parse_lab_report(contents, max_pages):
                   plus derived results marked `derived`
       panels    - the test panels detected, with their missing tests
       biomarkers - the detected panels' tests for the user to review and correct
-      features  - one canonical-unit value per known biomarker, for models
+      analyses  - a per-panel analysis (model inputs, findings, indices) for every
+                  panel with enough tests present (see analysis.py)
       unparsed  - lines that contain both letters and digits but didn't match a
                   result row (useful for spotting layouts the rules miss)
     report is None if the PDF has no extractable text (e.g. a scanned image).
@@ -326,7 +420,7 @@ def parse_lab_report(contents, max_pages):
         "results": results,
         "panels": panels,
         "biomarkers": review_list(results, panels),
-        "features": feature_vector(results),
+        "analyses": available_analyses(results),
         "unparsed": unparsed,
     }
     return report, len(pages)

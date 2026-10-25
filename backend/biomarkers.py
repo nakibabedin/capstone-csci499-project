@@ -9,9 +9,17 @@ NHANES codebooks before using them to build training data.
 
 Conversions map a normalized unit (see units.normalize_unit) to either a factor
 or a (factor, offset) pair: canonical = value * factor + offset.
+
+Some tests are reported as words ("Non Reactive", "Absent", "A"). Those have
+`answers`: the normalized answer -> "normal", "abnormal", or None when the answer
+says nothing about health (a blood group). A `kind: "text"` biomarker only has
+word answers; a numeric one with `answers` accepts either (an infection screen
+prints an index like "0.07 S/Co" or just "Non Reactive").
 """
 
-COUNT_THOUSANDS = {"10^3/uL": 1, "10^9/L": 1, "/uL": 0.001, "10^5/uL": 100}
+import re
+
+COUNT_THOUSANDS ={"10^3/uL": 1, "10^9/L": 1, "/uL": 0.001, "10^5/uL": 100}
 PERCENT = {"%": 1}
 CHOLESTEROL = {"mg/dL": 1, "mmol/L": 38.67}
 PROTEIN = {"g/dL": 1, "g/L": 0.1}
@@ -19,16 +27,80 @@ BILIRUBIN = {"mg/dL": 1, "umol/L": 1 / 17.1}
 ENZYME = {"U/L": 1, "IU/L": 1}
 ELECTROLYTE = {"mmol/L": 1, "mEq/L": 1}
 RATIO = {None: 1}
+SECONDS = {"sec": 1}
+NG_ML = {"ng/mL": 1, "ug/L": 1}
+TUMOR_UNITS = {"U/mL": 1, "kU/L": 1}
+SIGNAL_TO_CUTOFF = {"S/CO": 1, "index": 1, None: 1}
+PER_HPF = {"/hpf": 1, None: 1}
 
 
-def _b(aliases, loinc, unit, plausible, conversions, nhanes=None):
+def normalize_answer(text):
+    """'"A"' -> 'a', 'Present (+)' -> 'present', 'Non-Reactive' -> 'non reactive', '+ve' -> '+ve'.
+
+    Parenthesized grades are dropped; signs are kept because they carry the answer.
+    """
+    text = re.sub(r"\(.*?\)", " ", text.lower())
+    text = re.sub(r"(?<=[a-z])-(?=[a-z])", " ", text)
+    return " ".join(re.sub(r"[^a-z0-9+\- ]", " ", text).split())
+
+
+def _answers(normal=(), abnormal=(), informational=()):
     return {
+        **{normalize_answer(a): None for a in informational},
+        **{normalize_answer(a): "normal" for a in normal},
+        **{normalize_answer(a): "abnormal" for a in abnormal},
+    }
+
+
+# Presence/absence answers shared by infection screens and urine dipstick tests.
+SCREEN = _answers(
+    normal=["negative", "neg", "-ve", "non reactive", "nonreactive", "not reactive", "not detected", "absent", "nil", "none"],
+    abnormal=["positive", "pos", "+ve", "reactive", "detected", "present", "trace",
+              "+", "++", "+++", "++++", "1+", "2+", "3+", "4+"],
+)
+MICROSCOPY = _answers(
+    normal=["absent", "nil", "none", "none seen", "not seen", "occasional", "rare", "few"],
+    abnormal=["many", "plenty", "numerous", "loaded", "present"],
+)
+ABO = _answers(informational=["a", "b", "ab", "o"])
+RH = _answers(informational=["positive", "negative", "pos", "neg", "+ve", "-ve"])
+BLOOD_GROUP = _answers(informational=[f"{g}{rh}" for g in ("a", "b", "ab", "o")
+                                      for rh in (" positive", " negative", " rh positive", " rh negative", "+", "-", " +ve", " -ve")])
+URINE_COLOUR = _answers(
+    normal=["pale yellow", "light yellow", "yellow", "straw", "straw yellow", "colourless", "colorless"],
+    abnormal=["red", "reddish", "brown", "dark brown", "cola", "orange", "green", "blue", "milky"],
+    informational=["dark yellow", "amber"],
+)
+URINE_APPEARANCE = _answers(
+    normal=["clear"],
+    abnormal=["slightly turbid", "turbid", "cloudy", "slightly cloudy", "hazy", "slightly hazy"],
+)
+
+
+def _b(aliases, loinc, unit, plausible, conversions, nhanes=None, answers=None):
+    return {
+        "kind": "numeric",
         "aliases": aliases,
         "loinc": loinc,
         "nhanes": nhanes,
         "unit": unit,
         "conversions": conversions,
         "plausible": plausible,
+        "answers": answers or {},
+    }
+
+
+def _t(aliases, loinc, answers, nhanes=None):
+    """A test reported only in words: no unit, conversions or plausible range."""
+    return {
+        "kind": "text",
+        "aliases": aliases,
+        "loinc": loinc,
+        "nhanes": nhanes,
+        "unit": None,
+        "conversions": {},
+        "plausible": None,
+        "answers": answers,
     }
 
 
@@ -133,16 +205,118 @@ BIOMARKERS = {
                  "30522-7", "mg/L", (0, 500), {"mg/L": 1, "mg/dL": 10}, "LBXHSCRP"),
     "ESR": _b(["esr", "erythrocyte sedimentation rate", "sed rate"], "4537-7", "mm/hr", (0, 150), {"mm/hr": 1}),
     "Homocysteine": _b(["homocysteine"], "13965-9", "umol/L", (1, 200), {"umol/L": 1}, "LBXHCY"),
-    "PSA": _b(["psa", "psa total", "prostate specific antigen", "psa prostate specific antigen total"], "2857-1", "ng/mL", (0, 10000), {"ng/mL": 1}),
+    "PSA": _b(["psa", "psa total", "prostate specific antigen", "psa prostate specific antigen total", "total psa"], "2857-1", "ng/mL", (0, 10000), NG_ML),
+    "Reticulocytes": _b(["reticulocytes", "reticulocyte count", "retic count", "reticulocyte"], "4679-7", "%", (0, 40), PERCENT),
+    "LDH": _b(["ldh", "ld", "lactate dehydrogenase", "lactic dehydrogenase", "ldh total"], "2532-0", "U/L", (20, 10000), ENZYME, "LBXSLDSI"),
+    "Cystatin C": _b(["cystatin c"], "33863-2", "mg/L", (0.1, 10), {"mg/L": 1}),
+    "Urine Microalbumin": _b(["microalbumin", "urine microalbumin", "micro albumin", "urine albumin"],
+                             "14957-5", "mg/L", (0, 5000), {"mg/L": 1, "mg/dL": 10, "ug/mL": 1}),
+    "IgE": _b(["ige", "total ige", "ige total", "immunoglobulin e", "serum ige"], "19113-0", "IU/mL", (0, 50000), {"IU/mL": 1, "kU/L": 1}),
+    # Coagulation
+    "PT": _b(["pt", "prothrombin time", "pt prothrombin time", "prothrombin time pt", "pt patient", "pt test"],
+             "5902-2", "sec", (5, 200), SECONDS),
+    "INR": _b(["inr", "pt inr", "international normalized ratio", "international normalised ratio"], "6301-6", None, (0.5, 15), RATIO),
+    "aPTT": _b(["aptt", "ptt", "activated partial thromboplastin time", "partial thromboplastin time", "aptt patient"],
+               "3173-2", "sec", (10, 250), SECONDS),
+    "Fibrinogen": _b(["fibrinogen"], "3255-7", "mg/dL", (20, 1500), {"mg/dL": 1, "g/L": 100}),
+    "D-Dimer": _b(["d dimer", "ddimer", "d dimer quantitative"], "48065-7", "ug/mL", (0, 100), {"ug/mL": 1, "mg/L": 1, "ng/mL": 0.001}),
+    # Cardiac
+    "Troponin I": _b(["troponin i", "cardiac troponin i", "ctni", "trop i"], "10839-9", "ng/mL", (0, 1000), {**NG_ML, "ng/L": 0.001, "pg/mL": 0.001}),
+    "Troponin T": _b(["troponin t", "cardiac troponin t", "ctnt", "trop t"], "6598-7", "ng/mL", (0, 1000), {**NG_ML, "ng/L": 0.001, "pg/mL": 0.001}),
+    "hs-Troponin I": _b(["hs troponin i", "high sensitivity troponin i", "troponin i high sensitivity", "hs ctni", "hs tni"],
+                        "89579-7", "ng/L", (0, 100000), {"ng/L": 1, "pg/mL": 1, "ng/mL": 1000}),
+    "hs-Troponin T": _b(["hs troponin t", "high sensitivity troponin t", "troponin t high sensitivity", "hs ctnt", "hs tnt"],
+                        "67151-1", "ng/L", (0, 100000), {"ng/L": 1, "pg/mL": 1, "ng/mL": 1000}),
+    "CK": _b(["ck", "cpk", "creatine kinase", "creatine phosphokinase", "ck total", "cpk total"], "2157-6", "U/L", (5, 100000), ENZYME, "LBXSCK"),
+    "CK-MB": _b(["ck mb", "ckmb", "cpk mb", "ck mb mass"], "13969-1", "ng/mL", (0, 1000), NG_ML),
+    "BNP": _b(["bnp", "b type natriuretic peptide", "brain natriuretic peptide"], "30934-4", "pg/mL", (0, 50000), {"pg/mL": 1, "ng/L": 1}),
+    "NT-proBNP": _b(["nt probnp", "ntprobnp", "nt pro bnp", "n terminal pro bnp", "pro bnp"], "33762-6", "pg/mL", (0, 100000), {"pg/mL": 1, "ng/L": 1}),
+    # Pancreas
+    "Amylase": _b(["amylase", "serum amylase", "amylase total"], "1798-8", "U/L", (1, 10000), ENZYME),
+    "Lipase": _b(["lipase", "serum lipase"], "3040-3", "U/L", (1, 20000), ENZYME),
+    # Reproductive and adrenal hormones
+    "LH": _b(["lh", "luteinizing hormone", "luteinising hormone"], "10501-5", "mIU/mL", (0, 300), {"mIU/mL": 1, "IU/L": 1}, "LBXLUH"),
+    "FSH": _b(["fsh", "follicle stimulating hormone"], "15067-2", "mIU/mL", (0, 300), {"mIU/mL": 1, "IU/L": 1}, "LBXFSH"),
+    "Estradiol": _b(["estradiol", "oestradiol", "e2", "estradiol e2"], "2243-4", "pg/mL", (0, 10000), {"pg/mL": 1, "pmol/L": 1 / 3.671}, "LBXEST"),
+    "Progesterone": _b(["progesterone"], "2839-9", "ng/mL", (0, 500), {"ng/mL": 1, "nmol/L": 1 / 3.18}),
+    "Prolactin": _b(["prolactin", "prl"], "2842-3", "ng/mL", (0, 1000), NG_ML),
+    "Testosterone": _b(["testosterone", "testosterone total", "total testosterone", "testosterone serum"],
+                       "2986-8", "ng/dL", (1, 3000), {"ng/dL": 1, "ng/mL": 100, "nmol/L": 28.84}, "LBXTST"),
+    "Free Testosterone": _b(["free testosterone", "testosterone free"], "2991-8", "pg/mL", (0, 1000),
+                            {"pg/mL": 1, "pmol/L": 1 / 3.467, "ng/dL": 10}),
+    "SHBG": _b(["shbg", "sex hormone binding globulin"], "13967-5", "nmol/L", (1, 500), {"nmol/L": 1}, "LBXSHBG"),
+    "DHEA-S": _b(["dhea s", "dheas", "dhea sulfate", "dhea sulphate", "dehydroepiandrosterone sulfate"],
+                 "2191-5", "ug/dL", (1, 2000), {"ug/dL": 1, "umol/L": 36.85}),
+    "Cortisol": _b(["cortisol", "cortisol morning", "cortisol am", "serum cortisol", "cortisol random"],
+                   "2143-6", "ug/dL", (0.1, 200), {"ug/dL": 1, "nmol/L": 1 / 27.59}),
+    # Cardiovascular risk
+    "Apolipoprotein B": _b(["apolipoprotein b", "apo b", "apob", "apo b100"], "1884-6", "mg/dL", (10, 400), {"mg/dL": 1, "g/L": 100}, "LBXAPB"),
+    "Apolipoprotein A1": _b(["apolipoprotein a1", "apo a1", "apoa1", "apolipoprotein a 1"], "1869-7", "mg/dL", (20, 400), {"mg/dL": 1, "g/L": 100}),
+    "Lipoprotein(a)": _b(["lipoprotein a", "lp a", "lpa"], "10835-7", "mg/dL", (0, 500), {"mg/dL": 1, "mg/L": 0.1}),
+    # Tumor markers (PSA is above)
+    "Free PSA": _b(["free psa", "psa free"], "10886-0", "ng/mL", (0, 1000), NG_ML),
+    "CEA": _b(["cea", "carcinoembryonic antigen"], "2039-6", "ng/mL", (0, 10000), NG_ML),
+    "CA-125": _b(["ca 125", "ca125", "cancer antigen 125"], "10334-1", "U/mL", (0, 50000), TUMOR_UNITS),
+    "CA 19-9": _b(["ca 19 9", "ca19 9", "ca 199", "cancer antigen 19 9"], "24108-3", "U/mL", (0, 100000), TUMOR_UNITS),
+    "AFP": _b(["afp", "alpha fetoprotein", "alpha feto protein"], "1834-1", "ng/mL", (0, 100000), {**NG_ML, "IU/mL": 1.21}),
+    # Hemoglobin variants (HPLC)
+    "Hb A": _b(["hb a", "hemoglobin a", "haemoglobin a", "hba0"], "4546-8", "%", (0, 100), PERCENT),
+    "Hb A2": _b(["hb a2", "hba2", "hemoglobin a2", "haemoglobin a2"], "4551-8", "%", (0, 100), PERCENT),
+    "Hb F": _b(["hb f", "hbf", "foetal hb", "fetal hb", "fetal hemoglobin", "foetal haemoglobin", "hemoglobin f"], "4576-5", "%", (0, 100), PERCENT),
+    # Infection screening: an index ("0.07 S/Co") or a word ("Non Reactive")
+    "HIV Ab/Ag": _b(["hiv", "hiv i ii ab ag with p24 ag", "hiv 1 2 ab ag", "hiv ag ab", "hiv ab ag", "hiv 1 and 2 antibodies",
+                     "hiv i ii antibodies", "hiv antibody", "hiv combo", "hiv 1 2 antigen antibody"],
+                    "56888-1", "S/CO", (0, 5000), SIGNAL_TO_CUTOFF, answers=SCREEN),
+    "HBsAg": _b(["hbsag", "hepatitis b surface antigen", "hbs ag", "australia antigen"], "5196-1", "S/CO", (0, 50000), SIGNAL_TO_CUTOFF,
+                "LBDHBG", answers=SCREEN),
+    "Anti-HCV": _b(["anti hcv", "hcv antibody", "hcv ab", "hepatitis c antibody", "hcv"], "13955-0", "S/CO", (0, 5000), SIGNAL_TO_CUTOFF,
+                   answers=SCREEN),
+    "Syphilis (RPR/VDRL)": _t(["vdrl", "rpr", "syphilis rpr", "rpr vdrl", "vdrl test"], "20507-0", SCREEN),
+    # Blood group
+    "ABO Type": _t(["abo type", "abo group", "abo", "abo grouping"], "883-9", ABO),
+    "Rh Type": _t(["rh type", "rh d type", "rh factor", "rh", "rh d", "rh typing"], "10331-7", RH),
+    "Blood Group": _t(["blood group", "blood group abo rh", "abo rh", "blood type", "blood group and rh"], "882-1", BLOOD_GROUP),
+    # Urinalysis
+    "Urine pH": _b(["ph", "urine ph", "reaction ph"], "5803-2", None, (4, 10), RATIO),
+    "Specific Gravity": _b(["specific gravity", "urine specific gravity", "sp gravity"], "5811-5", None, (1.0, 1.06), RATIO),
+    "Urine Colour": _t(["colour", "color", "urine colour", "urine color"], "5778-6", URINE_COLOUR),
+    "Urine Appearance": _t(["appearance", "clarity", "clearity", "urine appearance", "transparency"], "5767-9", URINE_APPEARANCE),
+    "Urine Protein": _t(["urine protein", "protein urine", "albumin urine", "urine albumin dipstick"], "20454-5", SCREEN),
+    "Urine Glucose": _t(["urine glucose", "glucose urine", "urine sugar", "sugar urine"], "25428-4", SCREEN),
+    "Urine Ketones": _t(["urine ketone", "urine ketones", "ketones", "ketone bodies", "ketone"], "2514-8", SCREEN),
+    "Urine Blood": _t(["urine blood", "blood urine", "occult blood", "urine hemoglobin"], "5794-3", SCREEN),
+    "Urine Bilirubin": _t(["urine bilirubin", "bilirubin urine"], "5770-3", SCREEN),
+    "Urobilinogen": _t(["urobilinogen", "urine urobilinogen"], "20405-7", _answers(normal=["normal", "absent", "nil", "negative"],
+                                                                                    abnormal=["increased", "present", "positive"])),
+    "Nitrite": _t(["nitrite", "nitrites", "urine nitrite"], "5802-4", SCREEN),
+    "Leukocyte Esterase": _t(["leukocyte esterase", "leucocyte esterase", "urine leukocytes", "leukocyte esterase urine"], "5799-2", SCREEN),
+    "Pus Cells": _b(["pus cells", "wbc hpf", "urine wbc", "leucocytes hpf", "pus cells hpf"], "5821-4", "/hpf", (0, 1000), PER_HPF,
+                    answers=MICROSCOPY),
+    "Urine RBC": _b(["urine rbc", "rbc hpf", "red blood cells urine"], "13945-1", "/hpf", (0, 1000), PER_HPF, answers=MICROSCOPY),
+    "Epithelial Cells": _b(["epithelial cells", "epithelial cells hpf", "squamous epithelial cells"], "11277-1", "/hpf", (0, 1000), PER_HPF,
+                           answers=MICROSCOPY),
+    # Autoimmune
+    "ANA": _t(["ana", "antinuclear antibody", "antinuclear antibodies", "ana screen", "anti nuclear antibody"], "8061-4", SCREEN),
+    "Rheumatoid Factor": _b(["rheumatoid factor", "ra factor", "rf", "ra test"], "11572-5", "IU/mL", (0, 10000), {"IU/mL": 1, "U/mL": 1},
+                            answers=SCREEN),
+    "Anti-CCP": _b(["anti ccp", "anti ccp antibody", "ccp antibody", "anti cyclic citrullinated peptide"], "32218-0", "U/mL", (0, 10000),
+                   {"U/mL": 1}),
 }
 
 # A required member is a canonical name or a tuple of alternatives (any one counts;
-# the first is shown when none was found).
+# the first is shown when none was found). Panels people order a la carte (tumor
+# markers, hormones, infection screens) have no required tests: any one is enough.
+#
+# Each panel is also the unit of analysis (see analysis.py). Its `inputs` are the
+# model inputs in a fixed order (by default its required then optional tests), and
+# `schema_version` is bumped whenever they change, so one panel's model never breaks
+# because another panel changed. `min_coverage` is the fraction of required tests an
+# analysis needs.
 PANELS = {
     "cbc": {
         "name": "Complete Blood Count",
         "required": ["White Blood Cells", "Red Blood Cells", "Hemoglobin", "Hematocrit", "MCV", "MCH", "MCHC", "RDW", "Platelets"],
-        "optional": ["MPV"],
+        "optional": ["MPV", "Reticulocytes", "LDH"],
         "section_keywords": ["complete blood count", "cbc", "hemogram"],
     },
     "differential": {
@@ -182,7 +356,7 @@ PANELS = {
     "kidney": {
         "name": "Kidney Function",
         "required": ["Creatinine", ("BUN", "Urea"), "eGFR"],
-        "optional": ["Uric Acid", "BUN/Creatinine Ratio", "Phosphorus"],
+        "optional": ["Uric Acid", "BUN/Creatinine Ratio", "Phosphorus", "Cystatin C", "Urine Microalbumin"],
         "section_keywords": ["kidney", "renal"],
     },
     "thyroid": {
@@ -215,4 +389,90 @@ PANELS = {
         "optional": ["Homocysteine"],
         "section_keywords": ["inflammat", "sedimentation"],
     },
+    "coagulation": {
+        "name": "Coagulation",
+        "required": ["PT", "INR", "aPTT"],
+        "optional": ["Fibrinogen", "D-Dimer"],
+        "section_keywords": ["coagulation", "prothrombin", "clotting"],
+    },
+    "cardiac": {
+        "name": "Cardiac Markers",
+        "required": [("hs-Troponin I", "hs-Troponin T", "Troponin I", "Troponin T"), "CK"],
+        "optional": ["CK-MB", "BNP", "NT-proBNP"],
+        "section_keywords": ["cardiac"],
+    },
+    "pancreas": {
+        "name": "Pancreatic Enzymes",
+        "required": ["Amylase", "Lipase"],
+        "optional": [],
+        "section_keywords": ["pancrea"],
+    },
+    "reproductive": {
+        "name": "Reproductive Hormones",
+        "required": [],
+        "optional": ["LH", "FSH", "Estradiol", "Progesterone", "Prolactin", "Testosterone", "Free Testosterone", "SHBG", "DHEA-S"],
+        "section_keywords": ["reproductive", "fertility", "sex hormone", "hormone"],
+    },
+    "adrenal": {
+        "name": "Adrenal",
+        "required": ["Cortisol"],
+        "optional": [],
+        "section_keywords": ["adrenal", "cortisol"],
+    },
+    "cardiovascular_risk": {
+        "name": "Cardiovascular Risk",
+        "required": ["Apolipoprotein B", "Lipoprotein(a)"],
+        "optional": ["Apolipoprotein A1"],
+        "section_keywords": ["apolipoprotein", "cardiac risk", "cardiovascular risk"],
+    },
+    "tumor_markers": {
+        "name": "Tumor Markers",
+        "required": [],
+        "optional": ["PSA", "Free PSA", "CEA", "CA-125", "CA 19-9", "AFP"],
+        "section_keywords": ["tumor marker", "tumour marker", "cancer marker"],
+    },
+    "hb_variants": {
+        "name": "Hemoglobin Variants",
+        "required": ["Hb A", "Hb A2", "Hb F"],
+        "optional": [],
+        "section_keywords": ["electrophoresis", "hplc", "hemoglobin variant", "haemoglobin variant"],
+    },
+    "allergy": {
+        "name": "Allergy",
+        "required": ["IgE"],
+        "optional": [],
+        "section_keywords": ["allergy"],
+    },
+    "infection": {
+        "name": "Infection Screening",
+        "required": [],
+        "optional": ["HIV Ab/Ag", "HBsAg", "Anti-HCV", "Syphilis (RPR/VDRL)"],
+        "section_keywords": ["serology", "infectious"],
+    },
+    "blood_group": {
+        "name": "Blood Group",
+        "required": [("Blood Group", "ABO Type")],
+        "optional": ["Rh Type"],
+        "section_keywords": ["blood group"],
+    },
+    "urinalysis": {
+        "name": "Urinalysis",
+        "required": ["Urine pH", "Specific Gravity", "Urine Protein", "Urine Glucose", "Urine Ketones", "Urine Blood",
+                     "Nitrite", "Leukocyte Esterase"],
+        "optional": ["Urine Colour", "Urine Appearance", "Urobilinogen", "Urine Bilirubin", "Pus Cells", "Urine RBC",
+                     "Epithelial Cells"],
+        "section_keywords": ["urinalysis", "urine routine", "urine examination"],
+    },
+    "autoimmune": {
+        "name": "Autoimmune",
+        "required": [],
+        "optional": ["ANA", "Rheumatoid Factor", "Anti-CCP"],
+        "section_keywords": ["autoimmune", "rheumatoid"],
+    },
 }
+
+for _panel in PANELS.values():
+    _panel.setdefault("inputs", [name for member in _panel["required"] + _panel["optional"]
+                                 for name in (member if isinstance(member, tuple) else (member,))])
+    _panel.setdefault("schema_version", 1)
+    _panel.setdefault("min_coverage", 0.5)

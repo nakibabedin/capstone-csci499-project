@@ -5,8 +5,11 @@ from pathlib import Path
 import ollama
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
+from analysis import available_analyses
+from biomarkers import PANELS
 from lab_parser import parse_lab_report
-from summarizer import OLLAMA_MODEL, stream_summary
+from panels import derive, enrich
+from summarizer import OLLAMA_MODEL, stream_panel_summary
 
 MAX_PAGES = 20
 UPLOAD_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -43,17 +46,42 @@ def parse_upload(upload_id):
     return jsonify({"document": report})
 
 
-# --- Stream a plain-language summary from Ollama ---
+# --- Re-analyze after the user corrects values ---
 
-@reports_bp.route("/summarize", methods=["POST"])
-def summarize():
-    body = request.get_json(silent=True) or {}
-    results = body.get("results")
+def _corrected_results():
+    """The request's `results`, enriched and with derived values recomputed, or None if malformed."""
+    results = (request.get_json(silent=True) or {}).get("results")
+    if not isinstance(results, list) or not all(isinstance(r, dict) for r in results):
+        return None
+    # Derived values may be stale after a correction, so they're recomputed.
+    return derive(enrich([r for r in results if not r.get("derived")]))
+
+
+@reports_bp.route("/analyze", methods=["POST"])
+def analyze():
+    results = _corrected_results()
+    if not results:
+        return jsonify({"error": "No results to analyze."}), 400
+    return jsonify({"analyses": available_analyses(results)})
+
+
+# --- Stream a plain-language summary of one panel from Ollama ---
+
+@reports_bp.route("/panels/<panel_id>/summarize", methods=["POST"])
+def summarize_panel(panel_id):
+    if panel_id not in PANELS:
+        return jsonify({"error": "Unknown panel."}), 404
+    results = _corrected_results()
     if not results:
         return jsonify({"error": "No results to summarize."}), 400
+    analysis = next((a for a in available_analyses(results) if a["id"] == panel_id), None)
+    if analysis is None:
+        return jsonify({"error": "Not enough of this panel's tests are in the report to summarize it."}), 400
+    inputs = PANELS[panel_id]["inputs"]
+    panel_results = [r for r in results if r.get("canonical") in inputs and not r.get("derived")]
 
     try:
-        chunks = stream_summary(results, body.get("panels") or [])
+        chunks = stream_panel_summary(analysis, panel_results)
     except ConnectionError:
         return jsonify({"error": "Could not reach Ollama. Is `ollama serve` running?"}), 503
     except ollama.ResponseError as e:

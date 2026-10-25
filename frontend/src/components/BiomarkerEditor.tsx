@@ -18,14 +18,21 @@ export interface LabResult {
   unit_std?: string | null
   suspect?: boolean
   derived?: boolean
+  kind?: 'numeric' | 'text' | null
+  /** What a word answer means; see enrich() in backend/panels.py. */
+  text_status?: AnswerStatus
 }
+
+export type AnswerStatus = 'normal' | 'abnormal' | null
 
 export interface Biomarker extends LabResult {
   canonical: string
   found: boolean
   panel: string
   canonical_unit: string | null
-  plausible: [number, number]
+  plausible: [number, number] | null
+  /** Known word answers (normalized) and what each means. Empty for number-only tests. */
+  answers: Record<string, AnswerStatus>
 }
 
 export interface Panel {
@@ -47,6 +54,24 @@ type Errors = Partial<Record<keyof Draft, string>>
 
 const VALUE_RE = /^([<>]=?)?\s*(\d*\.?\d+)$/
 const NUMBER_RE = /^\d*\.?\d+$/
+// Cells per microscope field: "3" or "1-2" (urine microscopy).
+const COUNT_RE = /^(\d+)(?:\s*-\s*(\d+))?$/
+
+/** Mirrors normalize_answer() in backend/biomarkers.py. */
+function normalizeAnswer(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/(?<=[a-z])-(?=[a-z])/g, ' ')
+    .replace(/[^a-z0-9+\- ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(' ')
+}
+
+const hasAnswers = (b: Biomarker) => Object.keys(b.answers).length > 0
+const isKnownAnswer = (b: Biomarker, text: string) => normalizeAnswer(text) in b.answers
+const allowsCount = (b: Biomarker) => b.canonical_unit === '/hpf'
 
 function toDraft(b: Biomarker): Draft {
   return {
@@ -57,9 +82,14 @@ function toDraft(b: Biomarker): Draft {
   }
 }
 
-function validate(d: Draft): Errors {
+function validate(b: Biomarker, d: Draft): Errors {
   const errors: Errors = {}
-  if (d.value.trim() && !VALUE_RE.test(d.value.trim())) errors.value = 'Enter a number, e.g. 5.4 or >60'
+  const value = d.value.trim()
+  if (b.kind === 'text') {
+    if (value && !isKnownAnswer(b, value)) errors.value = 'Choose one of the listed answers'
+  } else if (value && !VALUE_RE.test(value) && !(hasAnswers(b) && isKnownAnswer(b, value)) && !(allowsCount(b) && COUNT_RE.test(value))) {
+    errors.value = hasAnswers(b) ? 'Enter a number or one of the listed answers' : 'Enter a number, e.g. 5.4 or >60'
+  }
   if (d.low.trim() && !NUMBER_RE.test(d.low.trim())) errors.low = 'Not a number'
   if (d.high.trim() && !NUMBER_RE.test(d.high.trim())) errors.high = 'Not a number'
   if (!errors.low && !errors.high && d.low.trim() && d.high.trim() && Number(d.low) > Number(d.high)) {
@@ -72,10 +102,29 @@ function isEdited(b: Biomarker, d: Draft) {
   return JSON.stringify(d) !== JSON.stringify(toDraft(b))
 }
 
-/** The corrected biomarker in the result shape /summarize expects, or null if it has no value. */
+/** The corrected biomarker in the result shape the backend expects, or null if it has no value. */
 function toResult(b: Biomarker, d: Draft): LabResult | null {
-  const match = VALUE_RE.exec(d.value.trim())
-  if (!match) return null
+  const text = d.value.trim()
+  if (!text) return null
+  const match = b.kind === 'text' ? null : VALUE_RE.exec(text)
+  if (!match) {
+    if (!isKnownAnswer(b, text) && !(allowsCount(b) && COUNT_RE.test(text))) return null
+    // A word answer (or a cell count). Its reference is the report's own, e.g. "Absent".
+    const count = allowsCount(b) ? COUNT_RE.exec(text) : null
+    return {
+      test: b.test,
+      canonical: b.canonical,
+      value: count ? Number(count[2] ?? count[1]) : null,
+      value_text: text,
+      unit: d.unit.trim() || null,
+      flag: text === b.value_text ? b.flag : null,
+      reference_range: b.reference_range,
+      ref_low: b.ref_low,
+      ref_high: b.ref_high,
+      kind: b.kind,
+      text_status: b.answers[normalizeAnswer(text)] ?? null,
+    }
+  }
   const original = toDraft(b)
   const low = d.low.trim() ? Number(d.low) : null
   const high = d.high.trim() ? Number(d.high) : null
@@ -166,7 +215,7 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
           .map((p) => p.id),
       ),
   )
-  const errors = drafts.map(validate)
+  const errors = drafts.map((d, i) => validate(biomarkers[i], d))
   const hasErrors = errors.some((e) => Object.keys(e).length > 0)
   const editedCount = biomarkers.filter((b, i) => isEdited(b, drafts[i])).length
 
@@ -191,7 +240,7 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
     onConfirm(corrected)
   }
 
-  function field(i: number, key: keyof Draft, label: string, className = '') {
+  function field(i: number, key: keyof Draft, label: string, className = '', list?: string) {
     const error = errors[i][key]
     return (
       <label className={`field ${className}`}>
@@ -199,6 +248,7 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
         <input
           value={drafts[i][key]}
           placeholder="—"
+          list={list}
           onChange={(e) => update(i, { [key]: e.target.value })}
           className={error ? 'invalid' : ''}
         />
@@ -211,10 +261,11 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
     const edited = isEdited(b, drafts[i])
     const preview = toResult(b, drafts[i])
     const status = preview ? resultStatus(preview) : 'unknown'
-    const std = preview?.value != null ? standardize(b, preview.value, preview.unit ?? '') : null
-    const [low, high] = b.plausible
-    const suspect = std != null && (std < low || std > high)
+    const isText = b.kind === 'text'
+    const std = !isText && preview?.value != null ? standardize(b, preview.value, preview.unit ?? '') : null
+    const suspect = std != null && b.plausible != null && (std < b.plausible[0] || std > b.plausible[1])
     const converted = std != null && (preview?.unit ?? '') !== (b.canonical_unit ?? '')
+    const answerList = hasAnswers(b) ? `answers-${i}` : undefined
     return (
       <div key={b.canonical} className={`biomarker status-${preview ? status : 'missing'}`}>
         <div className="biomarker-head">
@@ -227,10 +278,17 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
           {preview ? <StatusPill status={status} /> : <span className="pill pill-missing">No value</span>}
         </div>
 
-        <div className="biomarker-reading">
-          {field(i, 'value', 'Value', 'field-value')}
-          {field(i, 'unit', 'Unit', 'field-unit')}
+        <div className={`biomarker-reading ${isText ? 'biomarker-reading-text' : ''}`}>
+          {field(i, 'value', isText ? 'Result' : 'Value', 'field-value', answerList)}
+          {!isText && field(i, 'unit', 'Unit', 'field-unit')}
         </div>
+        {answerList && (
+          <datalist id={answerList}>
+            {Object.keys(b.answers).map((a) => (
+              <option key={a} value={a.replace(/\b[a-z]/g, (c) => c.toUpperCase())} />
+            ))}
+          </datalist>
+        )}
 
         {converted && (
           <div className="biomarker-converted">
@@ -239,13 +297,21 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
         )}
         {suspect && <div className="biomarker-suspect">⚠ Check this value — it's outside what's physically plausible</div>}
 
-        <RangeBar value={preview?.value ?? null} low={preview?.ref_low ?? null} high={preview?.ref_high ?? null} status={status} />
+        {isText ? (
+          <div className="biomarker-text-ref muted small">
+            {b.reference_range ? `Reference: ${b.reference_range}` : 'No reference printed'}
+          </div>
+        ) : (
+          <>
+            <RangeBar value={preview?.value ?? null} low={preview?.ref_low ?? null} high={preview?.ref_high ?? null} status={status} />
 
-        <div className="biomarker-ref">
-          {field(i, 'low', 'Ref low')}
-          <span className="ref-dash">–</span>
-          {field(i, 'high', 'Ref high')}
-        </div>
+            <div className="biomarker-ref">
+              {field(i, 'low', 'Ref low')}
+              <span className="ref-dash">–</span>
+              {field(i, 'high', 'Ref high')}
+            </div>
+          </>
+        )}
 
         {edited && (
           <div className="biomarker-edited">
@@ -295,7 +361,7 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
             {editedCount > 0 ? `${editedCount} correction${editedCount > 1 ? 's' : ''} made` : 'No corrections made'}
           </span>
           <button type="button" className="primary" onClick={confirm} disabled={hasErrors}>
-            {disabled ? 'Generating summary…' : 'Confirm & summarize'}
+            {disabled ? 'Analyzing…' : 'Confirm & analyze'}
           </button>
         </div>
       </fieldset>

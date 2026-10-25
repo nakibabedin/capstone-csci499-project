@@ -23,14 +23,18 @@ UNIT_SPELLINGS = {
     "lakh/cmm": "10^5/uL", "lakhs/cmm": "10^5/uL", "lakh/cumm": "10^5/uL", "lakhs/cumm": "10^5/uL", "lakh/ul": "10^5/uL",
     # Mass and molar concentrations
     "mg/dl": "mg/dL", "g/dl": "g/dL", "gm/dl": "g/dL", "gms/dl": "g/dL", "ug/dl": "ug/dL", "ng/dl": "ng/dL",
-    "g/l": "g/L", "mg/l": "mg/L", "ug/l": "ug/L", "ng/ml": "ng/mL", "pg/ml": "pg/mL",
+    "g/l": "g/L", "mg/l": "mg/L", "ug/l": "ug/L", "ng/l": "ng/L", "ug/ml": "ug/mL", "ng/ml": "ng/mL", "pg/ml": "pg/mL",
     "mmol/l": "mmol/L", "umol/l": "umol/L", "nmol/l": "nmol/L", "pmol/l": "pmol/L", "meq/l": "mEq/L",
     "mmol/mol": "mmol/mol", "l/l": "L/L",
     # Activity
-    "u/l": "U/L", "iu/l": "IU/L", "iu/ml": "IU/mL",
-    "uiu/ml": "uIU/mL", "uu/ml": "uIU/mL", "miu/l": "uIU/mL",
+    "u/l": "U/L", "iu/l": "IU/L", "iu/ml": "IU/mL", "u/ml": "U/mL", "ku/l": "kU/L",
+    "uiu/ml": "uIU/mL", "uu/ml": "uIU/mL", "miu/l": "uIU/mL", "miu/ml": "mIU/mL",
+    # Immunoassay signal-to-cutoff ratios (infection screens)
+    "s/co": "S/CO", "s/c": "S/CO", "index": "index", "coi": "index",
+    # Time
+    "sec": "sec", "secs": "sec", "seconds": "sec",
     # Other
-    "%": "%", "fl": "fL", "pg": "pg",
+    "%": "%", "fl": "fL", "pg": "pg", "/hpf": "/hpf", "cells/hpf": "/hpf",
     "mm/hr": "mm/hr", "mm/h": "mm/hr", "mm/1hr": "mm/hr", "mm/1st hr": "mm/hr", "mm/1sthr": "mm/hr",
     "ml/min/1.73m2": "mL/min/1.73m2", "ml/min/1.73m^2": "mL/min/1.73m2", "ml/min/1.73": "mL/min/1.73m2",
 }

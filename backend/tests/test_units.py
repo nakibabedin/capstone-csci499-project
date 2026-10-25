@@ -12,8 +12,9 @@ from units import normalize_unit, to_canonical
     ("micromol/L", "umol/L"), ("mmol/L", "mmol/L"), ("mEq/L", "mEq/L"),
     ("microIU/mL", "uIU/mL"), ("mIU/L", "uIU/mL"),
     ("mm/1hr", "mm/hr"), ("FL", "fL"),
+    ("mIU/mL", "mIU/mL"), ("S/Co", "S/CO"), ("COI", "index"), ("Seconds", "sec"), ("ng/L", "ng/L"), ("U/mL", "U/mL"), ("cells/hpf", "/hpf"),
     (None, None),
-    ("S/Co", "S/Co"),  # unrecognized -> unchanged
+    ("mOsm/kg", "mOsm/kg"),  # unrecognized -> unchanged
 ])
 def test_normalize_unit(token, expected):
     assert normalize_unit(token) == expected
