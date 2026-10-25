@@ -1,0 +1,11 @@
+# Notebook environment for building datasets and training models (separate from backend/).
+jupyter
+nbconvert
+ipykernel
+nbformat
+pandas
+pyarrow
+pyreadstat
+matplotlib
+scikit-learn==1.9.1  # must match backend/requirements.txt: trained models are pickled
+joblib

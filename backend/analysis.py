@@ -9,7 +9,11 @@ enough of its tests are present, whichever panel the lab ordered them under
                 missing, plus whether each was out of range on the report
     findings -> the panel's results that are out of range, abnormal or implausible
     indices  -> standard ratios computed from the report's values (NLR, HOMA-IR, ...)
-    model    -> the output of the panel's model in MODELS, or None until one exists
+    models   -> the outputs of the panel's models in MODELS (published formulas now,
+                trained models later)
+
+Models that draw on several panels at once (biological age) are in REPORT_MODELS
+and run by report_models() for the report as a whole.
 
 Which panels the lab ordered (for display) is panels.detect_panels; this module
 doesn't depend on it.
@@ -19,14 +23,20 @@ import logging
 import math
 
 from biomarkers import PANELS
+from models import DEFAULT_REPORT_MODELS, PANEL_MODELS
 from status import result_status
 
 log = logging.getLogger(__name__)
 
-# panel id -> callable(inputs) -> dict, e.g. {"prediction": 0.12, "model_version": "2026-11"}.
-# A model receives the panel's `inputs` (see _inputs) and must accept None for missing values.
-# Registering a trained model here is all it takes to add it to that panel's analysis.
-MODELS = {}
+# A model is a callable(inputs, context) returning a dict, or None when it doesn't apply:
+#   inputs  - the panel's inputs (see _inputs); None for REPORT_MODELS
+#   context - {"patient": {"age", "sex", "bmi"}, "values": canonical name -> canonical-unit value
+#              for every usable result on the report, "results": canonical name -> result}
+# and returning {"name", "value", "unit", "interpretation", "model_version", "missing"},
+# with value None and `missing` listing what it needed when it can't be computed.
+# Registering a model here is all it takes to add it to that panel's analysis.
+MODELS = {panel_id: list(models) for panel_id, models in PANEL_MODELS.items()}  # panel id -> [model]
+REPORT_MODELS = list(DEFAULT_REPORT_MODELS)
 
 
 def _alternatives(member):
@@ -191,25 +201,41 @@ def _indices(panel_id, values):
     return indices
 
 
-def _model(panel_id, inputs):
-    model = MODELS.get(panel_id)
-    if model is None:
-        return None
-    try:
-        return model(inputs)
-    except Exception as e:  # a broken model must not break the report
-        log.exception("Model for panel %s failed", panel_id)
-        return {"error": str(e)}
+def _run_models(models, inputs, context):
+    outputs = []
+    for model in models:
+        try:
+            output = model(inputs, context)
+        except Exception as e:  # a broken model must not break the report
+            log.exception("Model %s failed", getattr(model, "__name__", model))
+            output = {"name": getattr(model, "__name__", "model"), "value": None, "error": str(e)}
+        if output is not None:
+            outputs.append(output)
+    return outputs
 
 
-def available_analyses(results):
+def _context(first, patient):
+    return {
+        "patient": {key: (patient or {}).get(key) for key in ("age", "sex", "bmi")},
+        "values": {name: r["value_std"] for name, r in first.items() if r.get("value_std") is not None and not r.get("suspect")},
+        "results": first,
+    }
+
+
+def report_models(results, patient=None):
+    """The outputs of REPORT_MODELS, which use tests from several panels at once."""
+    return _run_models(REPORT_MODELS, None, _context(_first_results(results), patient))
+
+
+def available_analyses(results, patient=None):
     """An analysis for every panel with enough of its tests present, in PANELS order.
 
     `results` are enriched (and usually derived) results; see panels.enrich and derive.
+    `patient` is {"age": years, "sex": "male" | "female", "bmi": kg/m2}, each possibly None.
     """
     first = _first_results(results)
     found = {name for name, r in first.items() if not r.get("derived")}
-    values = {name: r["value_std"] for name, r in first.items() if r.get("value_std") is not None and not r.get("suspect")}
+    context = _context(first, patient)
     analyses = []
     for panel_id, panel in PANELS.items():
         if not _is_available(panel_id, found):
@@ -221,7 +247,7 @@ def available_analyses(results):
             "coverage": round(1 - len(inputs["missing"]) / len(panel["inputs"]), 2),
             "inputs": inputs,
             "findings": _findings(panel, results),
-            "indices": _indices(panel_id, values),
-            "model": _model(panel_id, inputs),
+            "indices": _indices(panel_id, context["values"]),
+            "models": _run_models(MODELS.get(panel_id, []), inputs, context),
         })
     return analyses

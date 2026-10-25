@@ -75,10 +75,32 @@ def test_index_is_skipped_without_its_inputs():
     assert diabetes["indices"] == []
 
 
-def test_registered_model_output_is_included(monkeypatch):
-    monkeypatch.setitem(analysis.MODELS, "thyroid", lambda inputs: {"prediction": inputs["values"]["TSH"] * 2, "model_version": "test"})
-    monkeypatch.setitem(analysis.MODELS, "allergy", lambda inputs: 1 / 0)
-    found = analyses_of([result("TSH", 2.0), result("IgE", 50)])
-    assert found["thyroid"]["model"] == {"prediction": 4.0, "model_version": "test"}
-    assert "error" in found["allergy"]["model"]
-    assert analyses_of([result("TSH", 2.0)])["thyroid"]["model"] == {"prediction": 4.0, "model_version": "test"}
+def test_registered_models_get_inputs_and_context(monkeypatch):
+    def doubled_tsh(inputs, context):
+        return {"name": "Doubled TSH", "value": inputs["values"]["TSH"] * 2, "age": context["patient"]["age"]}
+
+    def not_applicable(inputs, context):
+        return None
+
+    def broken(inputs, context):
+        return 1 / 0
+
+    monkeypatch.setitem(analysis.MODELS, "thyroid", [doubled_tsh, not_applicable])
+    monkeypatch.setitem(analysis.MODELS, "allergy", [broken])
+    found = {a["id"]: a for a in available_analyses(enrich([result("TSH", 2.0), result("IgE", 50)]), {"age": 41, "sex": "male"})}
+    assert found["thyroid"]["models"] == [{"name": "Doubled TSH", "value": 4.0, "age": 41}]
+    [error] = found["allergy"]["models"]
+    assert error["name"] == "broken" and error["value"] is None and "division" in error["error"]
+
+
+def test_report_models_see_every_panel(monkeypatch):
+    seen = {}
+
+    def spy(inputs, context):
+        seen.update(inputs=inputs, values=sorted(context["values"]), patient=context["patient"])
+        return {"name": "Spy", "value": 1}
+
+    monkeypatch.setattr(analysis, "REPORT_MODELS", [spy])
+    outputs = analysis.report_models(enrich([result("TSH", 2.0), result("Glucose", 90)]), {"age": 30})
+    assert outputs == [{"name": "Spy", "value": 1}]
+    assert seen == {"inputs": None, "values": ["Glucose", "TSH"], "patient": {"age": 30, "sex": None, "bmi": None}}

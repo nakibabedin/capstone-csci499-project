@@ -3,3 +3,4 @@ flask-cors
 pymupdf
 ollama
 pytest
+scikit-learn==1.9.1  # trained models (models/trained/) are pickled; must match ml/requirements.txt

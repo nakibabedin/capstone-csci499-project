@@ -210,7 +210,7 @@ BIOMARKERS = {
     "LDH": _b(["ldh", "ld", "lactate dehydrogenase", "lactic dehydrogenase", "ldh total"], "2532-0", "U/L", (20, 10000), ENZYME, "LBXSLDSI"),
     "Cystatin C": _b(["cystatin c"], "33863-2", "mg/L", (0.1, 10), {"mg/L": 1}),
     "Urine Microalbumin": _b(["microalbumin", "urine microalbumin", "micro albumin", "urine albumin"],
-                             "14957-5", "mg/L", (0, 5000), {"mg/L": 1, "mg/dL": 10, "ug/mL": 1}),
+                             "14957-5", "mg/L", (0, 5000), {"mg/L": 1, "mg/dL": 10, "ug/mL": 1}, "URXUMS"),
     "IgE": _b(["ige", "total ige", "ige total", "immunoglobulin e", "serum ige"], "19113-0", "IU/mL", (0, 50000), {"IU/mL": 1, "kU/L": 1}),
     # Coagulation
     "PT": _b(["pt", "prothrombin time", "pt prothrombin time", "prothrombin time pt", "pt patient", "pt test"],
@@ -238,7 +238,7 @@ BIOMARKERS = {
     "LH": _b(["lh", "luteinizing hormone", "luteinising hormone"], "10501-5", "mIU/mL", (0, 300), {"mIU/mL": 1, "IU/L": 1}, "LBXLUH"),
     "FSH": _b(["fsh", "follicle stimulating hormone"], "15067-2", "mIU/mL", (0, 300), {"mIU/mL": 1, "IU/L": 1}, "LBXFSH"),
     "Estradiol": _b(["estradiol", "oestradiol", "e2", "estradiol e2"], "2243-4", "pg/mL", (0, 10000), {"pg/mL": 1, "pmol/L": 1 / 3.671}, "LBXEST"),
-    "Progesterone": _b(["progesterone"], "2839-9", "ng/mL", (0, 500), {"ng/mL": 1, "nmol/L": 1 / 3.18}),
+    "Progesterone": _b(["progesterone"], "2839-9", "ng/mL", (0, 500), {"ng/mL": 1, "nmol/L": 1 / 3.18, "ng/dL": 0.01}, "LBXPG4"),
     "Prolactin": _b(["prolactin", "prl"], "2842-3", "ng/mL", (0, 1000), NG_ML),
     "Testosterone": _b(["testosterone", "testosterone total", "total testosterone", "testosterone serum"],
                        "2986-8", "ng/dL", (1, 3000), {"ng/dL": 1, "ng/mL": 100, "nmol/L": 28.84}, "LBXTST"),

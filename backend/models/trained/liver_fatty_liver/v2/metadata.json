@@ -1,0 +1,119 @@
+{
+  "name": "Fatty liver risk",
+  "model_version": "nhanes-liver-v2",
+  "panel": "liver",
+  "panel_schema_version": 1,
+  "features": [
+    "Bilirubin, Total",
+    "Alkaline Phosphatase",
+    "AST",
+    "ALT",
+    "GGT",
+    "Albumin",
+    "Total Protein",
+    "Globulin",
+    "Albumin/Globulin Ratio",
+    "Triglycerides",
+    "HDL Cholesterol",
+    "Hemoglobin A1c",
+    "Platelets",
+    "Uric Acid",
+    "age",
+    "male",
+    "bmi"
+  ],
+  "feature_units": {
+    "Bilirubin, Total": "mg/dL",
+    "Alkaline Phosphatase": "U/L",
+    "AST": "U/L",
+    "ALT": "U/L",
+    "GGT": "U/L",
+    "Albumin": "g/dL",
+    "Total Protein": "g/dL",
+    "Globulin": "g/dL",
+    "Albumin/Globulin Ratio": null,
+    "Triglycerides": "mg/dL",
+    "HDL Cholesterol": "mg/dL",
+    "Hemoglobin A1c": "%",
+    "Platelets": "10^3/uL",
+    "Uric Acid": "mg/dL"
+  },
+  "patient_features": {
+    "age": "years",
+    "male": "1 if male else 0",
+    "bmi": "kg/m2"
+  },
+  "required": [
+    "ALT",
+    "age",
+    "male"
+  ],
+  "calibration": {
+    "method": "platt",
+    "coef": 0.8522308772448576,
+    "intercept": -0.11590644705510626
+  },
+  "thresholds": {
+    "low_below": 0.2085,
+    "high_from": 0.5894
+  },
+  "label": "Elastography CAP >= 285 dB/m",
+  "training_data": "NHANES 2017-March 2020 adults with a complete elastography exam",
+  "training_rows": 4660,
+  "calibration_rows": 1165,
+  "metrics": {
+    "external_auroc": 0.849,
+    "external_auroc_ci": "0.836–0.861",
+    "external_auroc_without_bmi": 0.77,
+    "internal_auroc": 0.85,
+    "external_calibration_slope": 1.044,
+    "external_calibration_error": 0.01
+  },
+  "subgroup_mean_predicted_vs_observed": {
+    "sex: female": [
+      0.299,
+      0.297
+    ],
+    "sex: male": [
+      0.391,
+      0.383
+    ],
+    "race_ethnicity: Mexican American": [
+      0.396,
+      0.42
+    ],
+    "race_ethnicity: Non-Hispanic Asian": [
+      0.235,
+      0.303
+    ],
+    "race_ethnicity: Non-Hispanic Black": [
+      0.378,
+      0.284
+    ],
+    "race_ethnicity: Non-Hispanic White": [
+      0.339,
+      0.348
+    ],
+    "race_ethnicity: Other Hispanic": [
+      0.369,
+      0.339
+    ],
+    "race_ethnicity: Other/Multiracial": [
+      0.355,
+      0.294
+    ],
+    "age_band: 18–39": [
+      0.261,
+      0.254
+    ],
+    "age_band: 40–59": [
+      0.405,
+      0.41
+    ],
+    "age_band: 60–80": [
+      0.386,
+      0.372
+    ]
+  },
+  "sklearn_version": "1.9.1"
+}

@@ -43,16 +43,30 @@ def _describe(result):
     return f"- {name}: {value}{ref} — {result_status(result)}"
 
 
-def format_panel(analysis, results):
+def _describe_patient(patient):
+    """"41-year-old male", or None if neither is known."""
+    age, sex = (patient or {}).get("age"), (patient or {}).get("sex")
+    if age is None and sex is None:
+        return None
+    return " ".join(filter(None, [f"{age:g}-year-old" if age is not None else None, sex or "patient"]))
+
+
+def format_panel(analysis, results, patient=None):
     """The prompt for one panel: its out-of-range results in full first (so the
-    model can't skip them), then normal and unrated ones, untested ones and indices."""
+    model can't skip them), then normal and unrated ones, untested ones, indices
+    and model results."""
     def names(status):
         return ", ".join(r.get("canonical") or r.get("test") for r in results if result_status(r) == status)
 
     abnormal = [_describe(r) for r in results if result_status(r) not in ("normal", "unknown")]
     indices = [f"- {i['name']}: {i['value']} ({i['note']})" for i in analysis["indices"]]
+    indices += [f"- {m['name']}: {m['value']:g}{' ' + m['unit'] if m.get('unit') else ''} ({m['interpretation']})"
+                for m in analysis.get("models", []) if m.get("value") is not None]
+    who = _describe_patient(patient)
     return (
-        f"Panel: {analysis['name']}\n\n"
+        f"Panel: {analysis['name']}\n"
+        + (f"Patient: {who}\n" if who else "")
+        + "\n"
         + f"Out-of-range results ({len(abnormal)}):\n" + ("\n".join(abnormal) or "None")
         + "\n\nNormal results: " + (names("normal") or "None")
         + "\n\nResults with no reference range (do not call these normal or abnormal): "
@@ -63,7 +77,7 @@ def format_panel(analysis, results):
     )
 
 
-def stream_panel_summary(analysis, results):
+def stream_panel_summary(analysis, results, patient=None):
     """Yield one panel's summary text in chunks as the model generates it.
 
     `results` are the panel's own results. The first chunk is requested eagerly
@@ -74,7 +88,7 @@ def stream_panel_summary(analysis, results):
         model=OLLAMA_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": format_panel(analysis, results)},
+            {"role": "user", "content": format_panel(analysis, results, patient)},
         ],
         stream=True,
         keep_alive="30m",

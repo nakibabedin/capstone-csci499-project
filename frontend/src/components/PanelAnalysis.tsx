@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { summarizePanel, type PanelAnalysis } from '../api/reports'
+import { summarizePanel, type PanelAnalysis, type Patient } from '../api/reports'
 import type { LabResult } from './BiomarkerEditor'
+import ModelOutputs from './ModelOutputs'
 import { StatusPill } from './status'
 
 /** Renders the model's plain-text summary: "- " lines as bullets, "Heading:" lines as headings. */
@@ -33,23 +34,24 @@ function SummaryText({ text }: { text: string }) {
 
 interface Props {
   analysis: PanelAnalysis
-  /** The results the analysis was computed from, sent along for the summary. */
+  /** The results and patient the analysis was computed from, sent along for the summary. */
   results: LabResult[]
+  patient: Patient
 }
 
 /** One panel's findings, indices and model output, with an on-demand AI summary. */
-export default function PanelAnalysisCard({ analysis, results }: Props) {
+export default function PanelAnalysisCard({ analysis, results, patient }: Props) {
   const [summary, setSummary] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [summarizing, setSummarizing] = useState(false)
-  const { name, coverage, findings, indices, model, inputs } = analysis
+  const { name, coverage, findings, indices, models, inputs } = analysis
 
   async function summarize() {
     setSummary('')
     setError(null)
     setSummarizing(true)
     try {
-      const res = await summarizePanel(analysis.id, results)
+      const res = await summarizePanel(analysis.id, results, patient)
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}))
         setError(data.error ?? 'Failed to generate a summary.')
@@ -109,12 +111,7 @@ export default function PanelAnalysisCard({ analysis, results }: Props) {
         </div>
       )}
 
-      {model && (
-        <div className="model-output">
-          <span className="field-label">Model</span>
-          <pre>{JSON.stringify(model, null, 2)}</pre>
-        </div>
-      )}
+      <ModelOutputs outputs={models} />
 
       {inputs.missing.length > 0 && <p className="muted small">Not in this report: {inputs.missing.join(', ')}</p>}
 
