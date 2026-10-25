@@ -1,5 +1,0 @@
-flask
-flask-cors
-pymupdf
-ollama
-pytest

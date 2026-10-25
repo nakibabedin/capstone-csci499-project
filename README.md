@@ -54,6 +54,38 @@ Run the upload tests from the project root:
 backend/venv/bin/python -m unittest discover -s backend -p 'test_*.py' -v
 ```
 
+### Lab report parsing & summaries
+
+The parser and summarizer live in `backend/reports.py` and the modules it imports:
+`lab_parser`, `summarizer`, `biomarkers`, `panels` and `units`.
+
+| Method | Path                            | Description                                               |
+| ------ | ------------------------------- | --------------------------------------------------------- |
+| POST   | `/api/uploads/<upload_id>/parse` | Parse a PDF saved by `/api/upload` into lab results        |
+| POST   | `/api/summarize`                | Stream a plain-language summary (`{results, panels}`)     |
+
+Summaries need a local [Ollama](https://ollama.com) server. The model can be
+overridden with the `OLLAMA_MODEL` environment variable:
+
+```sh
+ollama serve
+ollama pull qwen2.5vl:7b
+```
+
+Run all backend tests, including the upload tests, from `backend/`:
+
+```sh
+venv/bin/python -m pytest
+```
+
+To check panel detection against a hand-verified answer key, run this from the project root:
+
+```sh
+backend/venv/bin/python eval/score_panels.py /path/to/report.pdf eval/expected/sterling-accuris-sample.json
+```
+
+`experiments/modal_gpu_bench/` holds an optional benchmark of vision models on Modal GPUs.
+
 ## Frontend (React + Vite, port 5173)
 
 Requires Node `^20.19` or `>=22.12` (`nvm use` picks up `.nvmrc`).

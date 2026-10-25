@@ -1,27 +1,34 @@
+import re
 import time
+from pathlib import Path
 
 import ollama
-from flask import Flask, Response, jsonify, request, stream_with_context
-from flask_cors import CORS
+from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
 from lab_parser import parse_lab_report
 from summarizer import OLLAMA_MODEL, stream_summary
 
 MAX_PAGES = 20
+UPLOAD_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
-app = Flask(__name__)
-CORS(app)
+reports_bp = Blueprint("reports", __name__, url_prefix="/api")
 
 
-@app.route("/upload", methods=["POST"])
-def upload_pdf():
-    file = request.files.get("file")
-    if file is None or not file.filename.lower().endswith(".pdf"):
-        return jsonify({"error": "Please upload a PDF file."}), 400
+# --- Parse a PDF previously saved by POST /api/upload ---
+
+@reports_bp.route("/uploads/<upload_id>/parse", methods=["POST"])
+def parse_upload(upload_id):
+    # upload_id comes from uuid4().hex; anything else could escape the folder.
+    if not UPLOAD_ID_RE.match(upload_id):
+        return jsonify({"error": "Invalid upload ID"}), 400
+
+    path = Path(current_app.config["UPLOAD_FOLDER"]) / f"{upload_id}.pdf"
+    if not path.is_file():
+        return jsonify({"error": "Upload not found"}), 404
 
     try:
         start = time.perf_counter()
-        report, num_pages = parse_lab_report(file.read(), MAX_PAGES)
+        report, num_pages = parse_lab_report(path.read_bytes(), MAX_PAGES)
         done = time.perf_counter()
     except Exception as e:
         return jsonify({"error": f"Failed to parse PDF: {e}"}), 400
@@ -29,15 +36,16 @@ def upload_pdf():
     if report is None:
         return jsonify({"error": "No text found in PDF (it may be a scanned image)."}), 400
 
-    print(
-        f"Parsed {file.filename}: {num_pages} pages, {len(report['results'])} results "
-        f"in {(done - start) * 1000:.0f}ms",
-        flush=True,
+    current_app.logger.info(
+        "Parsed upload %s: %d pages, %d results in %.0fms",
+        upload_id, num_pages, len(report["results"]), (done - start) * 1000,
     )
     return jsonify({"document": report})
 
 
-@app.route("/summarize", methods=["POST"])
+# --- Stream a plain-language summary from Ollama ---
+
+@reports_bp.route("/summarize", methods=["POST"])
 def summarize():
     body = request.get_json(silent=True) or {}
     results = body.get("results")
@@ -54,7 +62,3 @@ def summarize():
         return jsonify({"error": f"Summary failed: {e.error}"}), 500
 
     return Response(stream_with_context(chunks), mimetype="text/plain")
-
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5002)

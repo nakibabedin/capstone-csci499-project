@@ -132,5 +132,12 @@ def upload():
     }), 201
 
 
+# --- Lab report parsing and summaries (see reports.py) ---
+
+from reports import reports_bp  # noqa: E402
+
+app.register_blueprint(reports_bp)
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
