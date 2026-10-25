@@ -84,8 +84,6 @@ To check panel detection against a hand-verified answer key, run this from the p
 backend/venv/bin/python eval/score_panels.py /path/to/report.pdf eval/expected/sterling-accuris-sample.json
 ```
 
-`experiments/modal_gpu_bench/` holds an optional benchmark of vision models on Modal GPUs.
-
 ## Frontend (React + Vite, port 5173)
 
 Requires Node `^20.19` or `>=22.12` (`nvm use` picks up `.nvmrc`).
