@@ -1,8 +1,21 @@
+from pathlib import Path
+from uuid import uuid4
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+app.config.update(
+    MAX_CONTENT_LENGTH=10 * 1024 * 1024,
+    UPLOAD_FOLDER=Path(app.root_path) / "uploads",
+)
 CORS(app)
+
+
+@app.errorhandler(413)
+def upload_too_large(error):
+    return jsonify({"error": "Request exceeds the 10 MiB upload limit"}), 413
 
 # --- Mock data (in-memory; resets on restart) ---
 
@@ -71,7 +84,7 @@ def list_users():
     return jsonify(users)
 
 
-# --- Upload (mock: accepts a file and reports its name/size) ---
+# --- Upload (local storage; parsing and database integration come later) ---
 
 @app.route("/api/upload", methods=["POST"])
 def upload():
@@ -79,12 +92,44 @@ def upload():
     if file is None or file.filename == "":
         return jsonify({"error": "No file provided"}), 400
 
-    size = len(file.read())
+    filename = secure_filename(file.filename)
+    if not filename or Path(filename).suffix.lower() != ".pdf":
+        return jsonify({"error": "Only PDF files are accepted"}), 400
+
+    # Basic signature check only. The parser must check document readability.
+    if file.stream.read(5) != b"%PDF-":
+        return jsonify({"error": "File does not have a PDF header"}), 400
+    file.stream.seek(0)
+
+    upload_id = uuid4().hex
+    upload_folder = Path(app.config["UPLOAD_FOLDER"])
+    destination = upload_folder / f"{upload_id}.pdf"
+    created = False
+    try:
+        upload_folder.mkdir(parents=True, exist_ok=True)
+        # Exclusive creation prevents an existing file from being overwritten.
+        with destination.open("xb") as output:
+            created = True
+            file.save(output)
+        size = destination.stat().st_size
+    except OSError:
+        app.logger.exception("Could not save upload %s", upload_id)
+        # Only remove a file created by this request, never an existing file
+        # that caused exclusive creation to fail.
+        if created:
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                app.logger.exception("Could not clean up upload %s", upload_id)
+        return jsonify({"error": "Could not save the uploaded file"}), 500
+
     return jsonify({
-        "filename": file.filename,
+        "upload_id": upload_id,
+        "filename": filename,
         "size": size,
-        "message": "File received (mock endpoint, nothing was saved)",
-    })
+        "status": "uploaded",
+        "message": "PDF saved locally; parsing is not implemented yet",
+    }), 201
 
 
 if __name__ == "__main__":
