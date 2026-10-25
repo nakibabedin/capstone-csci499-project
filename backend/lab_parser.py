@@ -22,7 +22,7 @@ from collections import Counter
 import pymupdf
 
 from biomarkers import BIOMARKERS, normalize_answer
-from analysis import available_analyses
+from analysis import available_analyses, report_models
 from panels import derive, detect_panels, enrich, review_list
 
 # Text whose vertical centers are within this many points shares a line.
@@ -424,6 +424,7 @@ def parse_lab_report(contents, max_pages):
       patient   - the patient's age and sex from the report header (see extract_patient)
       analyses  - a per-panel analysis (model inputs, findings, indices, models) for
                   every panel with enough tests present (see analysis.py)
+      overall   - outputs of models that use several panels at once (biological age)
       unparsed  - lines that contain both letters and digits but didn't match a
                   result row (useful for spotting layouts the rules miss)
     report is None if the PDF has no extractable text (e.g. a scanned image).
@@ -463,6 +464,7 @@ def parse_lab_report(contents, max_pages):
         "biomarkers": review_list(results, panels),
         "patient": patient,
         "analyses": available_analyses(results, patient),
+        "overall": report_models(results, patient),
         "unparsed": unparsed,
     }
     return report, len(pages)

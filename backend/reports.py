@@ -5,7 +5,7 @@ from pathlib import Path
 import ollama
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
-from analysis import available_analyses
+from analysis import available_analyses, report_models
 from biomarkers import PANELS
 from lab_parser import parse_lab_report
 from panels import derive, enrich
@@ -71,7 +71,8 @@ def analyze():
     results = _corrected_results()
     if not results:
         return jsonify({"error": "No results to analyze."}), 400
-    return jsonify({"analyses": available_analyses(results, _patient())})
+    patient = _patient()
+    return jsonify({"analyses": available_analyses(results, patient), "overall": report_models(results, patient)})
 
 
 # --- Stream a plain-language summary of one panel from Ollama ---
