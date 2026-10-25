@@ -57,5 +57,38 @@ def test_unreadable_pdf(client):
     assert "error" in res.json
 
 
-def test_summarize_requires_results(client):
-    assert client.post("/api/summarize", json={}).status_code == 400
+def test_analyze_recomputes_from_corrected_results(client):
+    results = [{"test": "TSH", "canonical": "TSH", "value": 2.5, "value_text": "2.5", "unit": "uIU/mL"},
+               {"test": "Free T4", "canonical": "Free T4", "value": 1.3, "value_text": "1.3", "unit": "ng/dL"}]
+    res = client.post("/api/analyze", json={"results": results})
+    assert res.status_code == 200
+    [thyroid] = res.json["analyses"]
+    assert thyroid["id"] == "thyroid" and thyroid["inputs"]["values"]["TSH"] == 2.5
+
+
+@pytest.mark.parametrize("body", [{}, {"results": []}, {"results": "TSH"}, {"results": [1, 2]}])
+def test_analyze_rejects_missing_or_malformed_results(client, body):
+    assert client.post("/api/analyze", json=body).status_code == 400
+
+
+def test_panel_summary_errors(client):
+    tsh = [{"test": "TSH", "canonical": "TSH", "value": 2.5, "value_text": "2.5", "unit": "uIU/mL"}]
+    assert client.post("/api/panels/not-a-panel/summarize", json={"results": tsh}).status_code == 404
+    assert client.post("/api/panels/thyroid/summarize", json={}).status_code == 400
+    # TSH alone says nothing about the lipid panel.
+    assert client.post("/api/panels/lipid/summarize", json={"results": tsh}).status_code == 400
+
+
+def test_panel_summary_streams_only_that_panels_results(client, monkeypatch):
+    seen = {}
+
+    def fake_stream(analysis, results):
+        seen.update(panel=analysis["id"], tests=[r["canonical"] for r in results])
+        return iter(["TSH is ", "in range."])
+
+    monkeypatch.setattr("reports.stream_panel_summary", fake_stream)
+    results = [{"test": "TSH", "canonical": "TSH", "value": 2.5, "value_text": "2.5", "unit": "uIU/mL", "ref_low": 0.4, "ref_high": 4.0},
+               {"test": "Glucose", "canonical": "Glucose", "value": 90, "value_text": "90", "unit": "mg/dL"}]
+    res = client.post("/api/panels/thyroid/summarize", json={"results": results})
+    assert res.status_code == 200 and res.get_data(as_text=True) == "TSH is in range."
+    assert seen == {"panel": "thyroid", "tests": ["TSH"]}

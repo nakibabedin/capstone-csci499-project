@@ -1,6 +1,7 @@
-import { useState, type DragEvent, type FormEvent, type ReactNode } from 'react'
-import { summarize as requestSummary, uploadReport, type ParsedDocument } from '../api/reports'
+import { useState, type DragEvent, type FormEvent } from 'react'
+import { analyze, uploadReport, type PanelAnalysis, type ParsedDocument } from '../api/reports'
 import BiomarkerEditor, { type LabResult, type Panel } from '../components/BiomarkerEditor'
+import PanelAnalysisCard from '../components/PanelAnalysis'
 import { resultStatus, StatusPill, type Status } from '../components/status'
 import './UploadPage.css'
 
@@ -24,7 +25,7 @@ function PanelChips({ panels }: { panels: Panel[] }) {
 }
 
 function Steps({ current }: { current: number }) {
-  const steps = ['Upload report', 'Review biomarkers', 'AI summary']
+  const steps = ['Upload report', 'Review biomarkers', 'Panel analysis']
   return (
     <ol className="steps">
       {steps.map((label, i) => (
@@ -56,34 +57,6 @@ function Overview({ results }: { results: LabResult[] }) {
       ))}
     </div>
   )
-}
-
-/** Renders the model's plain-text summary: "- " lines as bullets, "Heading:" lines as headings. */
-function SummaryText({ text }: { text: string }) {
-  const blocks: ReactNode[] = []
-  let bullets: string[] = []
-  const flush = () => {
-    if (bullets.length) blocks.push(<ul key={blocks.length}>{bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>)
-    bullets = []
-  }
-  for (const raw of text.split('\n')) {
-    const line = raw.trim()
-    if (line.startsWith('- ') || line.startsWith('* ')) {
-      bullets.push(line.slice(2))
-      continue
-    }
-    flush()
-    if (!line) continue
-    const heading = /^([A-Z][^:]{2,60}):\s*(.*)$/.exec(line)
-    if (heading) {
-      blocks.push(<h3 key={blocks.length}>{heading[1]}</h3>)
-      if (heading[2]) blocks.push(<p key={blocks.length}>{heading[2]}</p>)
-    } else {
-      blocks.push(<p key={blocks.length}>{line}</p>)
-    }
-  }
-  flush()
-  return <div className="summary-text">{blocks}</div>
 }
 
 function ResultsTable({ results }: { results: LabResult[] }) {
@@ -136,49 +109,42 @@ export default function UploadPage() {
   const [document, setDocument] = useState<ParsedDocument | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [summary, setSummary] = useState('')
-  const [summaryError, setSummaryError] = useState<string | null>(null)
-  const [summarizing, setSummarizing] = useState(false)
-  // Bumped on each upload so the editor starts fresh from the new parse.
+  // The confirmed (possibly corrected) results and the panel analyses computed from them.
+  const [confirmed, setConfirmed] = useState<{ results: LabResult[]; analyses: PanelAnalysis[] } | null>(null)
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  // Bumped on each upload so the editor starts fresh from the new parse,
+  // and on each confirmation so panel cards drop summaries of old values.
   const [uploadId, setUploadId] = useState(0)
+  const [confirmId, setConfirmId] = useState(0)
 
-  function clearSummary() {
-    setSummary('')
-    setSummaryError(null)
+  function clearAnalysis() {
+    setConfirmed(null)
+    setAnalyzeError(null)
   }
 
-  async function summarize(corrected: LabResult[]) {
+  async function confirm(corrected: LabResult[]) {
     if (!document) return
     // Corrected biomarkers replace their parsed versions. Derived values are left
-    // out: they may be stale after a correction, and the summary explains the report's own values.
+    // out: they may be stale after a correction, so the backend recomputes them.
     const keyNames = new Set(document.biomarkers.map((b) => b.canonical))
     const results = [
       ...corrected,
       ...document.results.filter((r) => !keyNames.has(r.canonical ?? '') && !r.derived),
     ]
     if (results.length === 0) {
-      setSummaryError('No results to summarize.')
+      setAnalyzeError('No results to analyze.')
       return
     }
-    clearSummary()
-    setSummarizing(true)
+    clearAnalysis()
+    setAnalyzing(true)
     try {
-      const res = await requestSummary(results, document.panels)
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}))
-        setSummaryError(data.error ?? 'Failed to generate a summary.')
-        return
-      }
-      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        setSummary((prev) => prev + value)
-      }
-    } catch {
-      setSummaryError('Could not reach the server while summarizing.')
+      setConfirmed({ results, analyses: await analyze(results) })
+      setConfirmId((id) => id + 1)
+    } catch (err) {
+      setAnalyzeError(err instanceof TypeError ? 'Could not reach the server while analyzing.' : (err as Error).message)
     } finally {
-      setSummarizing(false)
+      setAnalyzing(false)
     }
   }
 
@@ -186,7 +152,7 @@ export default function UploadPage() {
     e.preventDefault()
     setDocument(null)
     setError(null)
-    clearSummary()
+    clearAnalysis()
     if (!file) return
 
     setLoading(true)
@@ -212,7 +178,7 @@ export default function UploadPage() {
     if (dropped) setFile(dropped)
   }
 
-  const step = summary || summarizing ? 2 : document ? 1 : 0
+  const step = confirmed ? 2 : document ? 1 : 0
 
   return (
     <div className="analyzer">
@@ -267,30 +233,25 @@ export default function UploadPage() {
             key={uploadId}
             biomarkers={document.biomarkers}
             panels={document.panels}
-            disabled={summarizing}
-            onChange={clearSummary}
-            onConfirm={summarize}
+            disabled={analyzing}
+            onChange={clearAnalysis}
+            onConfirm={confirm}
           />
         </>
       )}
 
-      {(summarizing || summary || summaryError) && (
-        <section className="card summary">
-          <div className="card-head">
-            <h2>Summary</h2>
-            {summarizing && <span className="spinner" aria-label="Generating" />}
-          </div>
-          {summaryError ? (
-            <div className="alert">{summaryError}</div>
-          ) : summary ? (
-            <SummaryText text={summary} />
-          ) : (
-            <p className="muted">Reading your results…</p>
+      {analyzeError && <div className="alert">{analyzeError}</div>}
+
+      {confirmed && (
+        <>
+          <h2 className="section-title">Panel analysis</h2>
+          {confirmed.analyses.length === 0 && (
+            <p className="muted">None of this report's panels have enough tests to analyze.</p>
           )}
-          <p className="disclaimer">
-            AI-generated summary for information only — not medical advice. Please review your results with your doctor.
-          </p>
-        </section>
+          {confirmed.analyses.map((a) => (
+            <PanelAnalysisCard key={`${confirmId}-${a.id}`} analysis={a} results={confirmed.results} />
+          ))}
+        </>
       )}
 
       {document != null && document.results.length > 0 && (

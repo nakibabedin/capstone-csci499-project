@@ -361,7 +361,7 @@ function BiomarkerEditor({ biomarkers, panels, disabled, onChange, onConfirm }: 
             {editedCount > 0 ? `${editedCount} correction${editedCount > 1 ? 's' : ''} made` : 'No corrections made'}
           </span>
           <button type="button" className="primary" onClick={confirm} disabled={hasErrors}>
-            {disabled ? 'Generating summary…' : 'Confirm & summarize'}
+            {disabled ? 'Analyzing…' : 'Confirm & analyze'}
           </button>
         </div>
       </fieldset>

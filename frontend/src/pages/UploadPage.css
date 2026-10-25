@@ -245,6 +245,26 @@
 }
 @keyframes analyzer-spin { to { transform: rotate(360deg); } }
 
+/* Panel analysis */
+.analyzer .section-title { margin-top: 0.5rem; }
+.analyzer .panel-analysis { display: flex; flex-direction: column; gap: 0.9rem; }
+.analyzer .panel-analysis .card-head { margin-bottom: 0; }
+.analyzer .findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.analyzer .findings li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; font-size: 0.9rem; }
+.analyzer .finding-test { font-weight: 600; }
+.analyzer .findings .num { font-variant-numeric: tabular-nums; }
+.analyzer .indices { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.6rem; }
+.analyzer .index {
+  border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.8rem; background: var(--surface-2); cursor: help;
+}
+.analyzer .index-value { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.analyzer .index-name { font-size: 0.78rem; color: var(--muted); }
+.analyzer .model-output pre {
+  margin: 0.25rem 0 0; font-size: 0.75rem; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.6rem; overflow: auto;
+}
+.analyzer .panel-analysis .summary { border-top: 1px solid var(--border); padding-top: 0.9rem; }
+
 /* Results table */
 .analyzer .table-wrap { overflow-x: auto; }
 .analyzer table.results { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
