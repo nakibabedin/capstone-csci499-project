@@ -45,3 +45,7 @@ Thumbs.db
 *.swp
 *.swo
 *.log
+
+# ---------- ML notebooks ----------
+ml/data/
+ml/artifacts/

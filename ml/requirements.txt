@@ -1,0 +1,11 @@
+# Notebook environment for building datasets and training models (separate from backend/).
+jupyter
+nbconvert
+ipykernel
+nbformat
+pandas
+pyarrow
+pyreadstat
+matplotlib
+scikit-learn
+joblib
