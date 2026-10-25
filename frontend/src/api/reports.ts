@@ -12,6 +12,8 @@ export interface ModelOutput {
   interpretation: string | null
   model_version?: string
   missing?: string[]
+  /** Risk band for trained risk models. */
+  band?: 'low' | 'intermediate' | 'high'
   error?: string
 }
 
@@ -41,10 +43,13 @@ export interface PanelAnalysis {
   models: ModelOutput[]
 }
 
-/** Age (years) and sex from the report header, confirmed or corrected by the user. */
+/** Age (years) and sex from the report header, confirmed or corrected by the user,
+ *  and optional height and weight the user enters (the backend computes BMI). */
 export interface Patient {
   age: number | null
   sex: 'male' | 'female' | null
+  height_cm?: number | null
+  weight_kg?: number | null
   /** The header line they were read from. */
   source?: string | null
 }

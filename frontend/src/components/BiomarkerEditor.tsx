@@ -202,17 +202,25 @@ interface Props {
   onConfirm: (corrected: LabResult[], patient: Patient) => void
 }
 
-function validateAge(age: string): string | undefined {
-  if (!age.trim()) return undefined
-  const n = Number(age)
-  return NUMBER_RE.test(age.trim()) && n <= 120 ? undefined : 'Enter an age in years, 0–120'
+/** An error for a number outside [low, high], or undefined if it's empty or valid. */
+function validateRange(text: string, low: number, high: number, message: string): string | undefined {
+  if (!text.trim()) return undefined
+  const n = Number(text)
+  return NUMBER_RE.test(text.trim()) && n >= low && n <= high ? undefined : message
 }
+
+const optionalNumber = (text: string) => (text.trim() ? Number(text) : null)
 
 function BiomarkerEditor({ biomarkers, panels, patient, disabled, onChange, onConfirm }: Props) {
   const [drafts, setDrafts] = useState<Draft[]>(() => biomarkers.map(toDraft))
   const [age, setAge] = useState(patient.age?.toString() ?? '')
   const [sex, setSex] = useState<Patient['sex']>(patient.sex)
-  const ageError = validateAge(age)
+  const [height, setHeight] = useState('')
+  const [weight, setWeight] = useState('')
+  const ageError = validateRange(age, 0, 120, 'Enter an age in years, 0–120')
+  const heightError = validateRange(height, 50, 250, 'Enter height in cm, 50–250')
+  const weightError = validateRange(weight, 2, 400, 'Enter weight in kg, 2–400')
+  const bmi = !heightError && !weightError && height.trim() && weight.trim() ? Number(weight) / (Number(height) / 100) ** 2 : null
   // Panels start open when they have missing tests or values to check.
   const [open, setOpen] = useState<Set<string>>(
     () =>
@@ -227,7 +235,7 @@ function BiomarkerEditor({ biomarkers, panels, patient, disabled, onChange, onCo
       ),
   )
   const errors = drafts.map((d, i) => validate(biomarkers[i], d))
-  const hasErrors = errors.some((e) => Object.keys(e).length > 0) || ageError != null
+  const hasErrors = errors.some((e) => Object.keys(e).length > 0) || [ageError, heightError, weightError].some((e) => e != null)
   const editedCount = biomarkers.filter((b, i) => isEdited(b, drafts[i])).length
 
   function update(i: number, patch: Partial<Draft>) {
@@ -248,7 +256,13 @@ function BiomarkerEditor({ biomarkers, panels, patient, disabled, onChange, onCo
     const corrected = biomarkers
       .map((b, i) => toResult(b, drafts[i]))
       .filter((r): r is LabResult => r !== null)
-    onConfirm(corrected, { age: age.trim() ? Number(age) : null, sex, source: patient.source })
+    onConfirm(corrected, {
+      age: optionalNumber(age),
+      sex,
+      height_cm: optionalNumber(height),
+      weight_kg: optionalNumber(weight),
+      source: patient.source,
+    })
   }
 
   function field(i: number, key: keyof Draft, label: string, className = '', list?: string) {
@@ -374,9 +388,38 @@ function BiomarkerEditor({ biomarkers, panels, patient, disabled, onChange, onCo
               <option value="male">Male</option>
             </select>
           </label>
-          <p className="muted small">
-            {patient.source ? `Read from “${patient.source}”. ` : 'Not found in the report. '}
-            Some calculations, like eGFR and biological age, need these.
+          <label className="field">
+            <span className="field-label">Height (cm)</span>
+            <input
+              value={height}
+              placeholder="optional"
+              inputMode="decimal"
+              onChange={(e) => {
+                setHeight(e.target.value)
+                onChange()
+              }}
+              className={heightError ? 'invalid' : ''}
+            />
+            {heightError && <span className="field-error">{heightError}</span>}
+          </label>
+          <label className="field">
+            <span className="field-label">Weight (kg)</span>
+            <input
+              value={weight}
+              placeholder="optional"
+              inputMode="decimal"
+              onChange={(e) => {
+                setWeight(e.target.value)
+                onChange()
+              }}
+              className={weightError ? 'invalid' : ''}
+            />
+            {weightError && <span className="field-error">{weightError}</span>}
+          </label>
+          <p className="muted small patient-note">
+            {patient.source ? `Age and sex read from “${patient.source}”. ` : 'Age and sex not found in the report. '}
+            Some calculations, like eGFR and biological age, need them. Height and weight are optional and make the
+            fatty liver estimate much more accurate{bmi != null ? ` (BMI ${bmi.toFixed(1)})` : ''}.
           </p>
         </div>
         {panels.length === 0 && <p className="muted">No standard test panels were recognized in this report.</p>}

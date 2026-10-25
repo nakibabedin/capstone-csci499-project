@@ -6,6 +6,10 @@ import pytest
 from app import app
 
 
+# A request's patient with no height or weight given.
+NO_BODY = {"height_cm": None, "weight_kg": None, "bmi": None}
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setitem(app.config, "TESTING", True)
@@ -92,15 +96,18 @@ def test_panel_summary_streams_only_that_panels_results(client, monkeypatch):
                {"test": "Glucose", "canonical": "Glucose", "value": 90, "value_text": "90", "unit": "mg/dL"}]
     res = client.post("/api/panels/thyroid/summarize", json={"results": results})
     assert res.status_code == 200 and res.get_data(as_text=True) == "TSH is in range."
-    assert seen == {"panel": "thyroid", "tests": ["TSH"], "patient": {"age": None, "sex": None}}
+    assert seen == {"panel": "thyroid", "tests": ["TSH"], "patient": {"age": None, "sex": None, **NO_BODY}}
 
 
 @pytest.mark.parametrize("patient, expected", [
-    ({"age": 41, "sex": "male"}, {"age": 41, "sex": "male"}),
-    ({"age": "41", "sex": "M"}, {"age": None, "sex": None}),
-    ({"age": 300, "sex": "female"}, {"age": None, "sex": "female"}),
-    ({"age": True}, {"age": None, "sex": None}),
-    (None, {"age": None, "sex": None}),
+    ({"age": 41, "sex": "male"}, {"age": 41, "sex": "male", **NO_BODY}),
+    ({"age": "41", "sex": "M"}, {"age": None, "sex": None, **NO_BODY}),
+    ({"age": 300, "sex": "female"}, {"age": None, "sex": "female", **NO_BODY}),
+    ({"age": True}, {"age": None, "sex": None, **NO_BODY}),
+    (None, {"age": None, "sex": None, **NO_BODY}),
+    ({"age": 41, "height_cm": 175, "weight_kg": 80}, {"age": 41, "sex": None, "height_cm": 175, "weight_kg": 80, "bmi": 26.1}),
+    ({"height_cm": 175}, {"age": None, "sex": None, "height_cm": 175, "weight_kg": None, "bmi": None}),
+    ({"height_cm": 20, "weight_kg": 80}, {"age": None, "sex": None, "height_cm": None, "weight_kg": 80, "bmi": None}),
 ])
 def test_patient_is_validated_and_passed_to_the_analysis(client, monkeypatch, patient, expected):
     seen = {}

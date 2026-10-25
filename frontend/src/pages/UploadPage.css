@@ -185,7 +185,7 @@
 
 /* Patient */
 .analyzer .patient-fields {
-  display: grid; grid-template-columns: 140px 180px 1fr; gap: 0.75rem; align-items: end;
+  display: grid; grid-template-columns: repeat(4, minmax(110px, 160px)) 1fr; gap: 0.75rem; align-items: end;
   padding-bottom: 1rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border);
 }
 .analyzer .patient-fields select {
@@ -193,7 +193,7 @@
   border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.5rem;
 }
 .analyzer .patient-fields p { padding-bottom: 0.45rem; }
-@media (max-width: 640px) { .analyzer .patient-fields { grid-template-columns: 1fr 1fr; } .analyzer .patient-fields p { grid-column: 1 / -1; } }
+@media (max-width: 900px) { .analyzer .patient-fields { grid-template-columns: 1fr 1fr; } .analyzer .patient-fields p { grid-column: 1 / -1; } }
 
 /* Panels */
 .analyzer .panel-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
@@ -277,6 +277,13 @@
   padding: 0.7rem 0.85rem; background: var(--surface-2); display: flex; flex-direction: column; gap: 0.3rem;
 }
 .analyzer .model-output-missing { border-left-color: var(--unknown); border-left-style: dashed; }
+.analyzer .model-output-low { border-left-color: var(--normal); }
+.analyzer .model-output-intermediate { border-left-color: var(--high); }
+.analyzer .model-output-high { border-left-color: var(--abnormal); }
+.analyzer .model-output .pill { align-self: flex-start; }
+.analyzer .pill-band-low { background: var(--normal-soft); color: var(--normal); }
+.analyzer .pill-band-intermediate { background: var(--high-soft); color: var(--high); }
+.analyzer .pill-band-high { background: var(--abnormal-soft); color: var(--abnormal); }
 .analyzer .model-output-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
 .analyzer .model-output-name { font-weight: 600; }
 .analyzer .model-output-value { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }

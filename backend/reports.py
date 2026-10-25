@@ -57,13 +57,27 @@ def _corrected_results():
     return derive(enrich([r for r in results if not r.get("derived")]))
 
 
+def _number(value, low, high):
+    """value if it's a number within [low, high], else None."""
+    ok = isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high
+    return value if ok else None
+
+
 def _patient():
-    """The request's `patient` age and sex, with anything missing or invalid as None."""
+    """The request's `patient` age, sex, height (cm) and weight (kg), with anything missing
+    or invalid as None, plus BMI when both height and weight are given."""
     patient = (request.get_json(silent=True) or {}).get("patient")
     patient = patient if isinstance(patient, dict) else {}
-    age, sex = patient.get("age"), patient.get("sex")
-    valid_age = isinstance(age, (int, float)) and not isinstance(age, bool) and 0 <= age <= 120
-    return {"age": age if valid_age else None, "sex": sex if sex in ("male", "female") else None}
+    sex = patient.get("sex")
+    height, weight = _number(patient.get("height_cm"), 50, 250), _number(patient.get("weight_kg"), 2, 400)
+    bmi = round(weight / (height / 100) ** 2, 1) if height and weight else None
+    return {
+        "age": _number(patient.get("age"), 0, 120),
+        "sex": sex if sex in ("male", "female") else None,
+        "height_cm": height,
+        "weight_kg": weight,
+        "bmi": bmi if bmi is not None and 10 <= bmi <= 100 else None,
+    }
 
 
 @reports_bp.route("/analyze", methods=["POST"])

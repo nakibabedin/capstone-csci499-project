@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 # A model is a callable(inputs, context) returning a dict, or None when it doesn't apply:
 #   inputs  - the panel's inputs (see _inputs); None for REPORT_MODELS
-#   context - {"patient": {"age", "sex"}, "values": canonical name -> canonical-unit value
+#   context - {"patient": {"age", "sex", "bmi"}, "values": canonical name -> canonical-unit value
 #              for every usable result on the report, "results": canonical name -> result}
 # and returning {"name", "value", "unit", "interpretation", "model_version", "missing"},
 # with value None and `missing` listing what it needed when it can't be computed.
@@ -216,7 +216,7 @@ def _run_models(models, inputs, context):
 
 def _context(first, patient):
     return {
-        "patient": {"age": (patient or {}).get("age"), "sex": (patient or {}).get("sex")},
+        "patient": {key: (patient or {}).get(key) for key in ("age", "sex", "bmi")},
         "values": {name: r["value_std"] for name, r in first.items() if r.get("value_std") is not None and not r.get("suspect")},
         "results": first,
     }
@@ -231,7 +231,7 @@ def available_analyses(results, patient=None):
     """An analysis for every panel with enough of its tests present, in PANELS order.
 
     `results` are enriched (and usually derived) results; see panels.enrich and derive.
-    `patient` is {"age": years or None, "sex": "male" | "female" | None}.
+    `patient` is {"age": years, "sex": "male" | "female", "bmi": kg/m2}, each possibly None.
     """
     first = _first_results(results)
     found = {name for name, r in first.items() if not r.get("derived")}

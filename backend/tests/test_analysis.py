@@ -103,4 +103,4 @@ def test_report_models_see_every_panel(monkeypatch):
     monkeypatch.setattr(analysis, "REPORT_MODELS", [spy])
     outputs = analysis.report_models(enrich([result("TSH", 2.0), result("Glucose", 90)]), {"age": 30})
     assert outputs == [{"name": "Spy", "value": 1}]
-    assert seen == {"inputs": None, "values": ["Glucose", "TSH"], "patient": {"age": 30, "sex": None}}
+    assert seen == {"inputs": None, "values": ["Glucose", "TSH"], "patient": {"age": 30, "sex": None, "bmi": None}}
