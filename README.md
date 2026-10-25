@@ -56,13 +56,21 @@ backend/venv/bin/python -m unittest discover -s backend -p 'test_*.py' -v
 
 ### Lab report parsing & summaries
 
-The parser and summarizer live in `backend/reports.py` and the modules it imports:
-`lab_parser`, `summarizer`, `biomarkers`, `panels` and `units`.
+The routes live in `backend/reports.py`. The tests and panels the app knows
+are in `backend/biomarkers.py`; adding a panel there is usually all it takes.
 
-| Method | Path                            | Description                                               |
-| ------ | ------------------------------- | --------------------------------------------------------- |
-| POST   | `/api/uploads/<upload_id>/parse` | Parse a PDF saved by `/api/upload` into lab results        |
-| POST   | `/api/summarize`                | Stream a plain-language summary (`{results, panels}`)     |
+| Method | Path                               | Description                                                     |
+| ------ | ---------------------------------- | --------------------------------------------------------------- |
+| POST   | `/api/uploads/<upload_id>/parse`   | Parse a PDF saved by `/api/upload` into results and analyses    |
+| POST   | `/api/analyze`                     | Re-analyze every panel from corrected `{results}`               |
+| POST   | `/api/panels/<panel_id>/summarize` | Stream a plain-language summary of one panel (`{results}`)      |
+
+Each panel is analyzed on its own whenever enough of its tests are present
+(`backend/analysis.py`). An analysis has the panel's model inputs (fixed order,
+canonical units, `schema_version`), out-of-range findings, standard indices
+(NLR, HOMA-IR, ...) and the output of the panel's ML model. To add a model,
+register a function in `analysis.MODELS` under the panel's id; it receives the
+panel's `inputs`.
 
 Summaries need a local [Ollama](https://ollama.com) server. The model can be
 overridden with the `OLLAMA_MODEL` environment variable:
