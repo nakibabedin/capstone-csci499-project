@@ -49,7 +49,7 @@ FLAGS = {
 }
 # Flags some labs print between the test name and the value.
 LEADING_FLAGS = {"H", "HH", "L", "LL", "HIGH", "LOW"}
-UNIT_WORDS = {"%", "fl", "pg", "g", "sec", "seconds", "mmhg", "units", "iu", "u"}
+UNIT_WORDS = {"%", "fl", "pg", "g", "sec", "secs", "seconds", "mmhg", "units", "iu", "u", "index", "coi"}
 
 # Lines whose "name" starts with one of these are patient/lab metadata, not results.
 METADATA_WORDS = {

@@ -27,7 +27,11 @@
     "diabetes": {"status": "complete", "missing": []},
     "iron": {"status": "partial", "missing": ["Ferritin"]},
     "vitamins": {"status": "partial", "missing": ["Folate"]},
-    "inflammation": {"status": "partial", "missing": ["CRP"]}
+    "inflammation": {"status": "partial", "missing": ["CRP"]},
+    "tumor_markers": {"status": "complete", "missing": []},
+    "hb_variants": {"status": "complete", "missing": []},
+    "allergy": {"status": "complete", "missing": []},
+    "infection": {"status": "complete", "missing": []}
   },
   "results": [
     {"page": 1, "section": "Complete Blood Count", "test": "Hemoglobin", "value": "14.5", "value_type": "numeric", "unit": "g/dL", "reference_range": "13.0 - 16.5", "flag": ""},
