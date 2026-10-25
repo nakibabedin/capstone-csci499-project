@@ -9,6 +9,8 @@ import os
 
 import ollama
 
+from status import result_status
+
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5vl:7b")
 
 SYSTEM_PROMPT = (
@@ -30,32 +32,6 @@ INSTRUCTIONS = (
 )
 
 llm = ollama.Client()
-
-
-def result_status(result):
-    """HIGH / LOW / ABNORMAL from the report's flag, else from the reference range.
-
-    "unknown" when there is neither, so a result is never called normal without
-    a range to back it up.
-    """
-    flag = result.get("flag")
-    if flag in ("H", "HH"):
-        return "HIGH"
-    if flag in ("L", "LL"):
-        return "LOW"
-    if flag:
-        return "ABNORMAL"
-    # A value like ">60" can't be compared precisely, so trust the (absent) flag.
-    if result.get("value_text", "")[:1] in "<>":
-        return "normal"
-    value, low, high = result.get("value"), result.get("ref_low"), result.get("ref_high")
-    if value is None or (low is None and high is None):
-        return "unknown"
-    if high is not None and value > high:
-        return "HIGH"
-    if low is not None and value < low:
-        return "LOW"
-    return "normal"
 
 
 def _describe(result):

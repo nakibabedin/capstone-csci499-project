@@ -8,7 +8,7 @@
     feature_vector -> one value per registry biomarker, in a fixed order, for models
 """
 
-from biomarkers import BIOMARKERS, PANELS
+from biomarkers import BIOMARKERS, PANELS, normalize_answer
 from units import normalize_unit, to_canonical
 
 FEATURE_SCHEMA_VERSION = 1
@@ -29,21 +29,29 @@ DETECTION_THRESHOLD = 0.5
 
 def enrich(results):
     """Copies of the results with `canonical` corrected for differential counts,
-    plus `loinc`, `value_std`, `unit_std` and `suspect`."""
+    plus `kind`, `loinc`, `value_std`, `unit_std` and `suspect`, and for a word
+    answer its `text_status` ("normal", "abnormal", or None if it isn't a health
+    signal or isn't a known answer)."""
     enriched = []
     for r in results:
         canonical = r.get("canonical")
         if canonical in PERCENT_TO_ABSOLUTE and normalize_unit(r.get("unit")) not in (None, "%"):
             canonical = PERCENT_TO_ABSOLUTE[canonical]
+        biomarker = BIOMARKERS.get(canonical)
         value_std, unit_std = to_canonical(canonical, r.get("value"), r.get("unit"))
-        low, high = BIOMARKERS[canonical]["plausible"] if canonical in BIOMARKERS else (None, None)
+        low, high = (biomarker or {}).get("plausible") or (None, None)
+        text_status = None
+        if biomarker and r.get("value") is None and r.get("value_text"):
+            text_status = biomarker["answers"].get(normalize_answer(r["value_text"]))
         enriched.append({
             **r,
             "canonical": canonical,
-            "loinc": BIOMARKERS[canonical]["loinc"] if canonical in BIOMARKERS else None,
+            "kind": biomarker["kind"] if biomarker else None,
+            "loinc": biomarker["loinc"] if biomarker else None,
             "value_std": value_std,
             "unit_std": unit_std,
-            "suspect": value_std is not None and not low <= value_std <= high,
+            "suspect": value_std is not None and low is not None and not low <= value_std <= high,
+            "text_status": text_status,
         })
     return enriched
 
@@ -141,7 +149,8 @@ def review_list(results, panels):
     its first panel: the first parsed result for it, or a found=False placeholder.
 
     Each carries its `canonical_unit` and `plausible` range so the editor can flag
-    an implausible value after the user changes it."""
+    an implausible value after the user changes it, and its known `answers` so
+    the editor can offer them for word-answer tests."""
     parsed = [r for r in results if not r.get("derived")]
     seen, biomarkers = set(), []
     for panel in panels:
@@ -153,10 +162,13 @@ def review_list(results, panels):
                 continue
             seen.add(name)
             match = next((r for r in parsed if r.get("canonical") == name), None)
+            plausible = BIOMARKERS[name]["plausible"]
             spec_fields = {
                 "panel": panel["id"],
+                "kind": BIOMARKERS[name]["kind"],
                 "canonical_unit": BIOMARKERS[name]["unit"],
-                "plausible": list(BIOMARKERS[name]["plausible"]),
+                "plausible": list(plausible) if plausible else None,
+                "answers": BIOMARKERS[name]["answers"],
             }
             if match is not None:
                 biomarkers.append({**match, **spec_fields, "found": True})
