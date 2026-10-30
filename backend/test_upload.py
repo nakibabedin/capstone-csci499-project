@@ -6,6 +6,8 @@ from unittest.mock import patch, Mock
 
 from app import app
 
+AUTH_HEADERS = {"Authorization": "Bearer test-token"}  # accepted by conftest.py
+
 
 class UploadTests(unittest.TestCase):
     def setUp(self):
@@ -21,11 +23,16 @@ class UploadTests(unittest.TestCase):
         self.folder.cleanup()
 
     def upload(self, content=b"%PDF-1.4\nsynthetic test fixture", name="report.pdf"):
-        return self.client.post("/api/upload", data={
+        return self.client.post("/api/upload", headers=AUTH_HEADERS, data={
             "file": (io.BytesIO(content), name)})
 
     def test_missing_file(self):
-        self.assertEqual(self.client.post("/api/upload").status_code, 400)
+        self.assertEqual(self.client.post("/api/upload", headers=AUTH_HEADERS).status_code, 400)
+
+    def test_works_without_login(self):
+        res = self.client.post("/api/upload", data={
+            "file": (io.BytesIO(b"%PDF-1.4\nsynthetic test fixture"), "report.pdf")})
+        self.assertEqual(res.status_code, 201)
 
     def test_empty_filename(self):
         self.assertEqual(self.upload(name="").status_code, 400)

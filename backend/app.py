@@ -1,44 +1,64 @@
-from functools import wraps
 import os
 from pathlib import Path
 from uuid import uuid4
 
-import requests
 from dotenv import load_dotenv
-from flask import Flask, g, jsonify, request
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
 from werkzeug.utils import secure_filename
 
 
+
 app = Flask(__name__)
 app.config.update(
     MAX_CONTENT_LENGTH=10 * 1024 * 1024,
     UPLOAD_FOLDER=Path(app.root_path) / "uploads",
+    RECORDS_FOLDER=Path(app.root_path) / "records",
 )
 CORS(app)
 
 # Load the database URL from backend/.env
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-database_url = os.getenv("DATABASE_URL")
-if not database_url:
-    raise RuntimeError("DATABASE_URL is missing from backend/.env")
+# Local development without Supabase: login is skipped and database routes
+# return 503. Never enable this in a deployed environment.
+supabase_disabled = os.getenv("DISABLE_SUPABASE", "").lower() == "true"
 
+database_url = os.getenv("DATABASE_URL")
 supabase_url = os.getenv("SUPABASE_URL")
 supabase_publishable_key = os.getenv("SUPABASE_PUBLISHABLE_KEY")
 
-if not supabase_url or not supabase_publishable_key:
-    raise RuntimeError(
-        "Supabase URL or publishable key is missing from backend/.env"
+if supabase_disabled:
+    app.logger.warning(
+        "DISABLE_SUPABASE=true: login is skipped and the database is off"
     )
+    # Placeholder so SQLAlchemy can initialise; nothing connects to it.
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://"
+else:
+    if not database_url:
+        raise RuntimeError(
+            "DATABASE_URL is missing from backend/.env "
+            "(set DISABLE_SUPABASE=true to develop without it)"
+        )
+    if not supabase_url or not supabase_publishable_key:
+        raise RuntimeError(
+            "Supabase URL or publishable key is missing from backend/.env "
+            "(set DISABLE_SUPABASE=true to develop without it)"
+        )
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args": {"sslmode": "require"}
+    }
 
-app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "connect_args": {"sslmode": "require"}
-}
+
+app.config.update(
+    SUPABASE_DISABLED=supabase_disabled,
+    SUPABASE_URL=supabase_url,
+    SUPABASE_PUBLISHABLE_KEY=supabase_publishable_key,
+)
 
 db = SQLAlchemy(app)
 class User(db.Model):
@@ -119,46 +139,6 @@ class BiomarkerResult(db.Model):
     )
 
 
-def require_auth(view):
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        auth_header = request.headers.get("Authorization", "")
-        scheme, separator, token = auth_header.partition(" ")
-
-        if scheme.lower() != "bearer" or not separator or not token:
-            return jsonify({"error": "Please log in first"}), 401
-
-        try:
-            response = requests.get(
-                f"{supabase_url.rstrip('/')}/auth/v1/user",
-                headers={
-                    "apikey": supabase_publishable_key,
-                    "Authorization": f"Bearer {token}",
-                },
-                timeout=10,
-            )
-        except requests.RequestException:
-            app.logger.exception("Could not contact Supabase Auth")
-            return jsonify({"error": "Could not verify login"}), 503
-
-        if response.status_code in (401, 403):
-            return jsonify({"error": "Login is invalid or expired"}), 401
-
-        if not response.ok:
-            app.logger.error(
-                "Supabase Auth returned HTTP %s", response.status_code
-            )
-            return jsonify({"error": "Could not verify login"}), 503
-
-        try:
-            g.auth_user = response.json()
-        except ValueError:
-            return jsonify({"error": "Could not verify login"}), 503
-
-        return view(*args, **kwargs)
-
-    return wrapped
-
 @app.errorhandler(413)
 def upload_too_large(error):
     return jsonify({"error": "Request exceeds the 10 MiB upload limit"}), 413
@@ -233,7 +213,10 @@ def list_users():
 
 @app.route("/api/biomarkers", methods=["GET"])
 def list_biomarkers():
-    biomarkers = Biomarker.query.order_by(Biomarker.name).all()
+    if app.config["SUPABASE_DISABLED"]:
+        return jsonify({"error": "Database is off (DISABLE_SUPABASE=true)"}), 503
+
+    biomarkers =Biomarker.query.order_by(Biomarker.name).all()
 
     return jsonify([
         {
@@ -248,7 +231,6 @@ def list_biomarkers():
 # --- Upload (local storage; parsing and database integration come later) ---
 
 @app.route("/api/upload", methods=["POST"])
-@require_auth
 def upload():
     file = request.files.get("file")
     if file is None or file.filename == "":
@@ -290,7 +272,7 @@ def upload():
         "filename": filename,
         "size": size,
         "status": "uploaded",
-        "message": "PDF saved locally; parsing is not implemented yet",
+        "message": "PDF saved; parse it with POST /api/uploads/<upload_id>/parse",
     }), 201
 
 
@@ -299,6 +281,12 @@ def upload():
 from reports import reports_bp  # noqa: E402
 
 app.register_blueprint(reports_bp)
+
+# --- Saved reports for the dashboard (see records.py) ---
+
+from records import records_bp  # noqa: E402
+
+app.register_blueprint(records_bp)
 
 
 if __name__ == "__main__":

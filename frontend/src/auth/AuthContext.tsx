@@ -6,7 +6,13 @@ import {
   type ReactNode,
 } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { supabase } from '../api/supabase'
+import { supabase, supabaseDisabled } from '../api/supabase'
+
+// Stand-in user while Supabase is disabled; only id and email are read.
+const DEV_USER = {
+  id: '00000000-0000-0000-0000-000000000000',
+  email: 'dev@localhost',
+} as User
 
 type AuthContextType = {
   user: User | null
@@ -16,10 +22,14 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(
+    supabaseDisabled ? DEV_USER : null,
+  )
+  const [loading, setLoading] = useState(!supabaseDisabled)
 
   useEffect(() => {
+    if (supabaseDisabled) return
+
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null)
       setLoading(false)

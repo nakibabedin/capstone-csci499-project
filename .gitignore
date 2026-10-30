@@ -35,6 +35,7 @@ pnpm-debug.log*
 
 # ---------- Uploads ----------
 uploads/
+backend/records/
 
 # ---------- OS / editors ----------
 .DS_Store
@@ -45,3 +46,4 @@ Thumbs.db
 *.swp
 *.swo
 *.log
+frontend/.env.example

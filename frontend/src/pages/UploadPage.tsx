@@ -1,8 +1,12 @@
-import { useState, type DragEvent, type FormEvent } from 'react'
+import { useEffect, useState, type DragEvent, type FormEvent } from 'react'
 import { analyze, uploadReport, type PanelAnalysis, type ParsedDocument } from '../api/reports'
 import BiomarkerEditor, { type LabResult, type Panel } from '../components/BiomarkerEditor'
+import { Link, useNavigate } from 'react-router-dom'
+import { saveReport } from '../api/records'
+import { useAuth } from '../auth/AuthContext'
 import PanelAnalysisCard from '../components/PanelAnalysis'
-import { resultStatus, StatusPill, type Status } from '../components/status'
+import ResultsTable from '../components/ResultsTable'
+import { resultStatus, type Status } from '../components/status'
 import './UploadPage.css'
 
 function PanelChips({ panels }: { panels: Panel[] }) {
@@ -59,47 +63,79 @@ function Overview({ results }: { results: LabResult[] }) {
   )
 }
 
-function ResultsTable({ results }: { results: LabResult[] }) {
+// Results kept in this browser tab while the user logs in to save them.
+const PENDING_SAVE_KEY = 'pendingSave'
+
+interface PendingSave {
+  uploadRef: string
+  filename: string
+  document: ParsedDocument
+  confirmed: { results: LabResult[]; analyses: PanelAnalysis[] } | null
+}
+
+function takePendingSave(): PendingSave | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_SAVE_KEY)
+    sessionStorage.removeItem(PENDING_SAVE_KEY)
+    return raw ? (JSON.parse(raw) as PendingSave) : null
+  } catch {
+    return null
+  }
+}
+
+function storePendingSave(pending: PendingSave) {
+  try {
+    sessionStorage.setItem(PENDING_SAVE_KEY, JSON.stringify(pending))
+  } catch {
+    // Storage full or blocked: the user can upload again after logging in.
+  }
+}
+
+type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'error'; message: string }
+
+function SaveResults({
+  loggedIn,
+  hasCorrections,
+  state,
+  onSave,
+}: {
+  loggedIn: boolean
+  hasCorrections: boolean
+  state: SaveState
+  onSave: () => void
+}) {
+  if (state.kind === 'saved') {
+    return (
+      <section className="card save-card saved">
+        <div>
+          <h2>✓ Saved to your dashboard</h2>
+          <p className="muted">You can find this report on your dashboard any time.</p>
+        </div>
+        <Link to="/dashboard" className="btn btn-primary">
+          View dashboard
+        </Link>
+      </section>
+    )
+  }
+
   return (
-    <div className="table-wrap">
-      <table className="results">
-        <thead>
-          <tr>
-            <th>Test</th>
-            <th>Result</th>
-            <th>Reference</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {results.map((r, i) => {
-            const newSection = r.section && r.section !== results[i - 1]?.section
-            return [
-              newSection && (
-                <tr key={`s${i}`} className="section-row">
-                  <td colSpan={4}>{r.section}</td>
-                </tr>
-              ),
-              <tr key={i}>
-                <td>
-                  {r.canonical ?? r.test}
-                  {r.derived && <span className="tag">calculated</span>}
-                  {r.suspect && <span className="tag tag-warn" title="Outside what's physically plausible; may be misread">⚠ check</span>}
-                  {r.canonical && r.canonical !== r.test && <div className="muted small">{r.test}</div>}
-                </td>
-                <td className="num">
-                  {r.value_text} <span className="muted">{r.unit}</span>
-                </td>
-                <td className="num muted">{r.reference_range ?? '—'}</td>
-                <td>
-                  <StatusPill status={resultStatus(r)} />
-                </td>
-              </tr>,
-            ]
-          })}
-        </tbody>
-      </table>
-    </div>
+    <section className="card save-card">
+      <div>
+        <h2>Save results</h2>
+        <p className="muted">
+          {loggedIn
+            ? 'Keep this report and its results on your dashboard.'
+            : "Log in to keep this report on your dashboard. We'll save it as soon as you're logged in."}
+          {hasCorrections
+            ? ' Your corrected values will be saved.'
+            : ' Confirm your biomarkers above first if you want to save corrected values.'}
+        </p>
+        {state.kind === 'error' && <div className="alert">{state.message}</div>}
+      </div>
+      <button type="button" className="btn btn-primary" onClick={onSave} disabled={state.kind === 'saving'}>
+        {state.kind === 'saving' ? 'Saving…' : 'Save Results'}
+      </button>
+    </section>
   )
 }
 
@@ -107,6 +143,14 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
   const [document, setDocument] = useState<ParsedDocument | null>(null)
+  // The server's ID for the uploaded PDF and its original name, needed to save it.
+  const [uploadRef, setUploadRef] = useState<string | null>(null)
+  const [filename, setFilename] = useState('')
+  const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' })
+  // Set when the user comes back from logging in, to finish saving.
+  const [autoSave, setAutoSave] = useState(false)
+  const { user, loading: authLoading } = useAuth()
+  const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   // The confirmed (possibly corrected) results and the panel analyses computed from them.
@@ -117,6 +161,46 @@ export default function UploadPage() {
   // and on each confirmation so panel cards drop summaries of old values.
   const [uploadId, setUploadId] = useState(0)
   const [confirmId, setConfirmId] = useState(0)
+
+  // Coming back from the login page: put the results back and finish saving.
+  useEffect(() => {
+    const pending = takePendingSave()
+    if (!pending) return
+    setDocument(pending.document)
+    setConfirmed(pending.confirmed)
+    setUploadRef(pending.uploadRef)
+    setFilename(pending.filename)
+    setUploadId((id) => id + 1)
+    setConfirmId((id) => id + 1)
+    setAutoSave(true)
+  }, [])
+
+  async function save() {
+    if (!uploadRef) return
+    if (!user) {
+      if (document) storePendingSave({ uploadRef, filename, document, confirmed })
+      navigate('/login', { state: { from: { pathname: '/upload' } } })
+      return
+    }
+    setSaveState({ kind: 'saving' })
+    try {
+      await saveReport(uploadRef, filename, confirmed?.results)
+      setSaveState({ kind: 'saved' })
+    } catch (err) {
+      setSaveState({
+        kind: 'error',
+        message: err instanceof TypeError ? 'Could not reach the server while saving.' : (err as Error).message,
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (!autoSave || authLoading) return
+    setAutoSave(false)
+    // Only save if they did log in; otherwise the button is still there.
+    if (user) void save()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once auth has settled
+  }, [autoSave, authLoading, user])
 
   function clearAnalysis() {
     setConfirmed(null)
@@ -152,12 +236,17 @@ export default function UploadPage() {
     e.preventDefault()
     setDocument(null)
     setError(null)
+    setUploadRef(null)
+    setSaveState({ kind: 'idle' })
     clearAnalysis()
     if (!file) return
 
     setLoading(true)
     try {
-      setDocument(await uploadReport(file))
+      const { document, uploadId: ref } = await uploadReport(file)
+      setDocument(document)
+      setUploadRef(ref)
+      setFilename(file.name)
       setUploadId((id) => id + 1)
     } catch (err) {
       // fetch rejects with a TypeError only when the server can't be reached.
@@ -269,6 +358,10 @@ export default function UploadPage() {
           <summary>Raw parsed output</summary>
           <pre>{JSON.stringify(document, null, 2)}</pre>
         </details>
+      )}
+
+      {document != null && uploadRef && (
+        <SaveResults loggedIn={user != null} hasCorrections={confirmed != null} state={saveState} onSave={save} />
       )}
     </div>
   )

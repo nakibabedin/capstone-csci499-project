@@ -24,6 +24,7 @@ import pymupdf
 from biomarkers import BIOMARKERS, normalize_answer
 from analysis import available_analyses
 from panels import derive, detect_panels, enrich, review_list
+from report_date import find_report_date
 
 # Text whose vertical centers are within this many points shares a line.
 LINE_TOLERANCE = 3.0
@@ -387,6 +388,7 @@ def parse_lab_report(contents, max_pages):
                   panel with enough tests present (see analysis.py)
       unparsed  - lines that contain both letters and digits but didn't match a
                   result row (useful for spotting layouts the rules miss)
+      report_date - when the sample was taken, if labelled (see report_date.py)
     report is None if the PDF has no extractable text (e.g. a scanned image).
     """
     with pymupdf.open(stream=contents, filetype="pdf") as pdf:
@@ -422,6 +424,8 @@ def parse_lab_report(contents, max_pages):
         "biomarkers": review_list(results, panels),
         "analyses": available_analyses(results),
         "unparsed": unparsed,
+        # Searched before boilerplate is dropped: the date is often in the page header.
+        "report_date": find_report_date([line for lines in pages for line in lines]),
     }
     return report, len(pages)
 

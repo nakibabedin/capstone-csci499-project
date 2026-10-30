@@ -21,6 +21,7 @@ reports_bp = Blueprint("reports", __name__, url_prefix="/api")
 
 @reports_bp.route("/uploads/<upload_id>/parse", methods=["POST"])
 def parse_upload(upload_id):
+    """Parse the PDF. No login needed; saving to a dashboard is POST /api/records."""
     # upload_id comes from uuid4().hex; anything else could escape the folder.
     if not UPLOAD_ID_RE.match(upload_id):
         return jsonify({"error": "Invalid upload ID"}), 400
@@ -43,18 +44,23 @@ def parse_upload(upload_id):
         "Parsed upload %s: %d pages, %d results in %.0fms",
         upload_id, num_pages, len(report["results"]), (done - start) * 1000,
     )
+
     return jsonify({"document": report})
 
 
 # --- Re-analyze after the user corrects values ---
 
-def _corrected_results():
-    """The request's `results`, enriched and with derived values recomputed, or None if malformed."""
-    results = (request.get_json(silent=True) or {}).get("results")
+def recompute(results):
+    """`results` enriched and with derived values recomputed, or None if malformed."""
     if not isinstance(results, list) or not all(isinstance(r, dict) for r in results):
         return None
     # Derived values may be stale after a correction, so they're recomputed.
     return derive(enrich([r for r in results if not r.get("derived")]))
+
+
+def _corrected_results():
+    """The request's `results`, recomputed (see recompute), or None if malformed."""
+    return recompute((request.get_json(silent=True) or {}).get("results"))
 
 
 @reports_bp.route("/analyze", methods=["POST"])

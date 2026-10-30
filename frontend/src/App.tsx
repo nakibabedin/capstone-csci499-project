@@ -21,14 +21,8 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="upload"
-          element={
-            <ProtectedRoute>
-              <UploadPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Open to everyone; saving results asks for a login. */}
+        <Route path="upload" element={<UploadPage />} />
         <Route path="about" element={<AboutPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="*" element={<NotFoundPage />} />

@@ -7,7 +7,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation()
 
   if (loading) {
-    return <p>Checking login…</p>
+    return <p className="muted">Checking login…</p>
   }
 
   if (!user) {

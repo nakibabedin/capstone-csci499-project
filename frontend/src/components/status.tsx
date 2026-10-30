@@ -27,6 +27,20 @@ export const STATUS_LABEL: Record<Status, string> = {
   unknown: 'No range',
 }
 
+const PILL_COLORS: Record<Status, string> = {
+  high: 'bg-orange-100 text-orange-700',
+  low: 'bg-blue-100 text-blue-700',
+  abnormal: 'bg-red-100 text-red-700',
+  normal: 'bg-green-100 text-green-700',
+  unknown: 'bg-slate-100 text-slate-500',
+}
+
 export function StatusPill({ status }: { status: Status }) {
-  return <span className={`pill pill-${status}`}>{STATUS_LABEL[status]}</span>
+  return (
+    <span
+      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${PILL_COLORS[status]}`}
+    >
+      {STATUS_LABEL[status]}
+    </span>
+  )
 }

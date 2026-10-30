@@ -4,6 +4,6 @@ pymupdf
 ollama
 pytest
 Flask-SQLAlchemy
-psycopg2-binary
+psycopg[binary]
 python-dotenv
 requests

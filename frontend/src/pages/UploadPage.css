@@ -287,3 +287,15 @@
   white-space: pre-wrap; background: var(--surface); border: 1px solid var(--border);
   border-radius: 8px; padding: 1rem; font-size: 0.75rem; max-height: 400px; overflow: auto;
 }
+
+
+/* Save results card at the bottom */
+.analyzer .save-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; flex-wrap: wrap;
+  border-color: var(--primary); background: var(--primary-soft);
+}
+.analyzer .save-card > div { flex: 1; min-width: 240px; }
+.analyzer .save-card p { margin-top: 0.3rem; font-size: 0.9rem; }
+.analyzer .save-card .alert { margin-top: 0.75rem; }
+.analyzer .save-card.saved { border-color: var(--normal); background: var(--normal-soft); }
+.analyzer .save-card.saved h2 { color: var(--normal); }
