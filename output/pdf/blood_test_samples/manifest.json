@@ -1,0 +1,132 @@
+[
+  {
+    "sample_id": "sample_01",
+    "scenario": "All numeric reference intervals within range",
+    "pdf": "sample_01_normal.pdf",
+    "expected_json": "sample_01_normal.expected.json",
+    "counts": {
+      "low": 0,
+      "high": 0,
+      "within_range": 20,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_02",
+    "scenario": "Every numeric result exactly at its inclusive lower bound",
+    "pdf": "sample_02_lower_boundaries.pdf",
+    "expected_json": "sample_02_lower_boundaries.expected.json",
+    "counts": {
+      "low": 0,
+      "high": 0,
+      "within_range": 20,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_03",
+    "scenario": "Every numeric result exactly at its inclusive upper bound",
+    "pdf": "sample_03_upper_boundaries.pdf",
+    "expected_json": "sample_03_upper_boundaries.expected.json",
+    "counts": {
+      "low": 0,
+      "high": 0,
+      "within_range": 20,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_04",
+    "scenario": "One displayed precision step below each positive lower bound",
+    "pdf": "sample_04_just_below.pdf",
+    "expected_json": "sample_04_just_below.expected.json",
+    "counts": {
+      "low": 17,
+      "high": 0,
+      "within_range": 3,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_05",
+    "scenario": "One displayed precision step above each upper bound",
+    "pdf": "sample_05_just_above.pdf",
+    "expected_json": "sample_05_just_above.expected.json",
+    "counts": {
+      "low": 0,
+      "high": 20,
+      "within_range": 0,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_06",
+    "scenario": "Low cell counts and low red-cell indices",
+    "pdf": "sample_06_markedly_low.pdf",
+    "expected_json": "sample_06_markedly_low.expected.json",
+    "counts": {
+      "low": 12,
+      "high": 1,
+      "within_range": 7,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_07",
+    "scenario": "High cell counts and multiple elevated results",
+    "pdf": "sample_07_markedly_high.pdf",
+    "expected_json": "sample_07_markedly_high.expected.json",
+    "counts": {
+      "low": 0,
+      "high": 14,
+      "within_range": 6,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_08",
+    "scenario": "Mixed low and high flags in the CD4/CD8 section",
+    "pdf": "sample_08_low_cd4_high_cd8.pdf",
+    "expected_json": "sample_08_low_cd4_high_cd8.expected.json",
+    "counts": {
+      "low": 3,
+      "high": 2,
+      "within_range": 15,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_09",
+    "scenario": "Elevated CD4/CD8 ratio with low CD8 results",
+    "pdf": "sample_09_high_ratio.pdf",
+    "expected_json": "sample_09_high_ratio.expected.json",
+    "counts": {
+      "low": 2,
+      "high": 1,
+      "within_range": 17,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  },
+  {
+    "sample_id": "sample_10",
+    "scenario": "Zeros, trailing decimals and mixed result flags",
+    "pdf": "sample_10_mixed_precision.pdf",
+    "expected_json": "sample_10_mixed_precision.expected.json",
+    "counts": {
+      "low": 5,
+      "high": 3,
+      "within_range": 12,
+      "not_established": 5,
+      "not_provided": 1
+    }
+  }
+]

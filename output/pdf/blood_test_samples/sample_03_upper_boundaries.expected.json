@@ -1,0 +1,467 @@
+{
+  "schema_version": "1.0",
+  "sample_id": "sample_03",
+  "synthetic": true,
+  "scenario": "Every numeric result exactly at its inclusive upper bound",
+  "source_pdf": "sample_03_upper_boundaries.pdf",
+  "patient": {
+    "name": "Synthetic Patient, 003",
+    "patient_id": "SYN-003",
+    "date_of_birth": "1970-01-01",
+    "age": 55,
+    "sex": "Female"
+  },
+  "account_number": "SYN900003",
+  "specimen_id": "SYN-2025-003",
+  "date_collected": "2025-01-21",
+  "date_received": "2025-01-21",
+  "date_reported": "2025-01-22",
+  "fasting": "Not Given",
+  "ordered_items": [
+    "CD4/CD8 Ratio Profile"
+  ],
+  "results": [
+    {
+      "test_name": "Absolute CD 4 Helper",
+      "lab_code": null,
+      "value": 1519,
+      "value_text": "1519",
+      "unit": "/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "359-1519",
+        "lower": 359.0,
+        "upper": 1519.0
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "% CD 4 Pos. Lymph.",
+      "lab_code": "01",
+      "value": 58.5,
+      "value_text": "58.5",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "30.8-58.5",
+        "lower": 30.8,
+        "upper": 58.5
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Abs. CD 8 Suppressor",
+      "lab_code": null,
+      "value": 897,
+      "value_text": "897",
+      "unit": "/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "109-897",
+        "lower": 109.0,
+        "upper": 897.0
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "% CD 8 Pos. Lymph.",
+      "lab_code": "01",
+      "value": 35.5,
+      "value_text": "35.5",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "12.0-35.5",
+        "lower": 12.0,
+        "upper": 35.5
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "CD4/CD8 Ratio",
+      "lab_code": null,
+      "value": 3.72,
+      "value_text": "3.72",
+      "unit": null,
+      "flag": null,
+      "reference_interval": {
+        "text": "0.92-3.72",
+        "lower": 0.92,
+        "upper": 3.72
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "WBC",
+      "lab_code": "02",
+      "value": 10.8,
+      "value_text": "10.8",
+      "unit": "x10E3/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "3.4-10.8",
+        "lower": 3.4,
+        "upper": 10.8
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "RBC",
+      "lab_code": "02",
+      "value": 5.28,
+      "value_text": "5.28",
+      "unit": "x10E6/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "3.77-5.28",
+        "lower": 3.77,
+        "upper": 5.28
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Hemoglobin",
+      "lab_code": "02",
+      "value": 15.9,
+      "value_text": "15.9",
+      "unit": "g/dL",
+      "flag": null,
+      "reference_interval": {
+        "text": "11.1-15.9",
+        "lower": 11.1,
+        "upper": 15.9
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Hematocrit",
+      "lab_code": "02",
+      "value": 46.6,
+      "value_text": "46.6",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "34.0-46.6",
+        "lower": 34.0,
+        "upper": 46.6
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "MCV",
+      "lab_code": "02",
+      "value": 97,
+      "value_text": "97",
+      "unit": "fL",
+      "flag": null,
+      "reference_interval": {
+        "text": "79-97",
+        "lower": 79.0,
+        "upper": 97.0
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "MCH",
+      "lab_code": "02",
+      "value": 33.0,
+      "value_text": "33.0",
+      "unit": "pg",
+      "flag": null,
+      "reference_interval": {
+        "text": "26.6-33.0",
+        "lower": 26.6,
+        "upper": 33.0
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "MCHC",
+      "lab_code": "02",
+      "value": 35.7,
+      "value_text": "35.7",
+      "unit": "g/dL",
+      "flag": null,
+      "reference_interval": {
+        "text": "31.5-35.7",
+        "lower": 31.5,
+        "upper": 35.7
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "RDW",
+      "lab_code": "02",
+      "value": 15.4,
+      "value_text": "15.4",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "11.7-15.4",
+        "lower": 11.7,
+        "upper": 15.4
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Platelets",
+      "lab_code": "02",
+      "value": 450,
+      "value_text": "450",
+      "unit": "x10E3/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "150-450",
+        "lower": 150.0,
+        "upper": 450.0
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Neutrophils",
+      "lab_code": "02",
+      "value": 55,
+      "value_text": "55",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "Not Estab.",
+        "lower": null,
+        "upper": null
+      },
+      "range_status": "not_established",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Lymphs",
+      "lab_code": "02",
+      "value": 40,
+      "value_text": "40",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "Not Estab.",
+        "lower": null,
+        "upper": null
+      },
+      "range_status": "not_established",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Monocytes",
+      "lab_code": "02",
+      "value": 3,
+      "value_text": "3",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "Not Estab.",
+        "lower": null,
+        "upper": null
+      },
+      "range_status": "not_established",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Eos",
+      "lab_code": "02",
+      "value": 1,
+      "value_text": "1",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "Not Estab.",
+        "lower": null,
+        "upper": null
+      },
+      "range_status": "not_established",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Basos",
+      "lab_code": "02",
+      "value": 1,
+      "value_text": "1",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": "Not Estab.",
+        "lower": null,
+        "upper": null
+      },
+      "range_status": "not_established",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Neutrophils (Absolute)",
+      "lab_code": "02",
+      "value": 7.0,
+      "value_text": "7.0",
+      "unit": "x10E3/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "1.4-7.0",
+        "lower": 1.4,
+        "upper": 7.0
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Lymphs (Absolute)",
+      "lab_code": "02",
+      "value": 3.1,
+      "value_text": "3.1",
+      "unit": "x10E3/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "0.7-3.1",
+        "lower": 0.7,
+        "upper": 3.1
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Monocytes(Absolute)",
+      "lab_code": "02",
+      "value": 0.9,
+      "value_text": "0.9",
+      "unit": "x10E3/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "0.1-0.9",
+        "lower": 0.1,
+        "upper": 0.9
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Eos (Absolute)",
+      "lab_code": "02",
+      "value": 0.4,
+      "value_text": "0.4",
+      "unit": "x10E3/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "0.0-0.4",
+        "lower": 0.0,
+        "upper": 0.4
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Baso (Absolute)",
+      "lab_code": "02",
+      "value": 0.2,
+      "value_text": "0.2",
+      "unit": "x10E3/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "0.0-0.2",
+        "lower": 0.0,
+        "upper": 0.2
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    },
+    {
+      "test_name": "Immature Granulocytes",
+      "lab_code": "02",
+      "value": 0,
+      "value_text": "0",
+      "unit": "%",
+      "flag": null,
+      "reference_interval": {
+        "text": null,
+        "lower": null,
+        "upper": null
+      },
+      "range_status": "not_provided",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": "Available upon request"
+    },
+    {
+      "test_name": "Immature Grans (Abs)",
+      "lab_code": "02",
+      "value": 0.1,
+      "value_text": "0.1",
+      "unit": "x10E3/uL",
+      "flag": null,
+      "reference_interval": {
+        "text": "0.0-0.1",
+        "lower": 0.0,
+        "upper": 0.1
+      },
+      "range_status": "within_range",
+      "previous_result": null,
+      "previous_result_date": null,
+      "note": null
+    }
+  ]
+}

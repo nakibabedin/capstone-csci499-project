@@ -1,7 +1,8 @@
 from pathlib import Path
+import re
 from uuid import uuid4
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -130,6 +131,21 @@ def upload():
         "status": "uploaded",
         "message": "PDF saved locally; parsing is not implemented yet",
     }), 201
+
+
+@app.route("/api/uploads/<upload_id>", methods=["GET"])
+def download_upload(upload_id):
+    # Upload IDs are generated as 32-character lowercase UUID hex strings.
+    # Validate before building a path so callers cannot traverse the upload folder.
+    if re.fullmatch(r"[0-9a-f]{32}", upload_id) is None:
+        return jsonify({"error": "Invalid upload ID"}), 400
+
+    upload_folder = Path(app.config["UPLOAD_FOLDER"])
+    filename = f"{upload_id}.pdf"
+    if not (upload_folder / filename).is_file():
+        return jsonify({"error": "Upload not found"}), 404
+
+    return send_from_directory(upload_folder, filename, as_attachment=True)
 
 
 if __name__ == "__main__":

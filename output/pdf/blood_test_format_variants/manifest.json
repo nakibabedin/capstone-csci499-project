@@ -1,0 +1,35 @@
+[
+  {
+    "sample_id": "format_01",
+    "description": "Landscape table; Test / Range / Units / Flag / Result / Previous",
+    "pdf": "format_01_compact_landscape.pdf",
+    "expected_json": "format_01_compact_landscape.expected.json",
+    "pages": 1,
+    "result_count": 26,
+    "baseline_sample": "sample_10",
+    "flag_normalization": {}
+  },
+  {
+    "sample_id": "format_02",
+    "description": "Sectioned cards; wrapped test names; changed display order",
+    "pdf": "format_02_sectioned_cards.pdf",
+    "expected_json": "format_02_sectioned_cards.expected.json",
+    "pages": 2,
+    "result_count": 26,
+    "baseline_sample": "sample_10",
+    "flag_normalization": {}
+  },
+  {
+    "sample_id": "format_03",
+    "description": "Continued multipage table; repeated headers; nested reference lines; H/L flags",
+    "pdf": "format_03_dense_multipage.pdf",
+    "expected_json": "format_03_dense_multipage.expected.json",
+    "pages": 2,
+    "result_count": 26,
+    "baseline_sample": "sample_10",
+    "flag_normalization": {
+      "H": "High",
+      "L": "Low"
+    }
+  }
+]

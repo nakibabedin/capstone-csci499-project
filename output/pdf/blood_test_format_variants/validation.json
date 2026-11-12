@@ -1,0 +1,23 @@
+[
+  {
+    "sample_id": "format_01",
+    "page_count": 1,
+    "selectable_text": true,
+    "verified_result_count": 26,
+    "normalized_results_identical_to_baseline": true
+  },
+  {
+    "sample_id": "format_02",
+    "page_count": 2,
+    "selectable_text": true,
+    "verified_result_count": 26,
+    "normalized_results_identical_to_baseline": true
+  },
+  {
+    "sample_id": "format_03",
+    "page_count": 2,
+    "selectable_text": true,
+    "verified_result_count": 26,
+    "normalized_results_identical_to_baseline": true
+  }
+]

@@ -23,6 +23,7 @@ Items and users are mock data held in memory and reset on restart. Uploads are s
 | DELETE | `/api/items/<id>`  | Delete item                         |
 | GET    | `/api/users`       | List users                          |
 | POST   | `/api/upload`      | Save a PDF (multipart `file`)       |
+| GET    | `/api/uploads/<upload_id>` | Download a saved PDF by upload ID |
 
 ### Upload milestone
 
@@ -44,9 +45,11 @@ any existing file that caused exclusive creation to fail. If cleanup itself
 fails, the server logs that failure and still returns the JSON storage error.
 This handles caught storage errors, not abrupt process termination or power loss.
 
-Uploads survive server restarts, but there is no report metadata database,
-parser, user ownership, or download endpoint yet. Use synthetic reports for
-development. Parser readability checks and database integration are next steps.
+Uploads survive server restarts. `GET /api/uploads/<upload_id>` returns a saved
+PDF as an attachment; malformed IDs return 400 and IDs with no saved file return
+404. There is no report metadata database, parser, or user ownership yet. Use
+synthetic reports for development. Parser readability checks and database
+integration are next steps.
 
 Run the upload tests from the project root:
 
