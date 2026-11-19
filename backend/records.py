@@ -2,10 +2,9 @@
 
 Anyone can upload, parse and analyze a report; saving it needs a login.
 
-Temporary storage: one JSON file per user in RECORDS_FOLDER, plus a copy of
-each saved PDF in RECORDS_FOLDER/pdfs, until the data moves to the Supabase
-`reports` and `biomarker_results` tables (see app.py). The record fields follow
-those tables so the move is mostly a storage swap.
+The dashboard reads per-user JSON and PDF files. Authenticated saves also
+store report metadata in PostgreSQL. A retry syncs an existing local record
+using its original UUID, including records saved before database integration.
 
 Routes (all require login):
   POST   /api/records           save an uploaded report: {"upload_id", "filename", "results"?}
@@ -20,17 +19,19 @@ import os
 import re
 import shutil
 import tempfile
-import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+from filelock import FileLock
+from sqlalchemy.exc import SQLAlchemyError
 from flask import Blueprint, current_app, g, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
 from analysis import available_analyses
 from auth import require_auth
 from lab_parser import parse_lab_report
+from models import Report, User, db
 from reports import MAX_PAGES, UPLOAD_ID_RE, recompute
 from status import result_status
 
@@ -38,7 +39,7 @@ RECORD_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 USER_ID_RE = re.compile(r"^[0-9a-fA-F-]{36}$")
 
 records_bp = Blueprint("records", __name__, url_prefix="/api")
-_lock = threading.Lock()
+
 
 
 # --- Storage ---
@@ -77,6 +78,38 @@ def _save(user_id, records):
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
+
+
+def _user_lock(user_id):
+    path = _user_file(user_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return FileLock(str(path) + ".lock")
+
+
+def _sync_metadata(record):
+    if current_app.config["SUPABASE_DISABLED"]:
+        return
+
+    user_id = UUID(g.auth_user["id"])
+    report_id = UUID(record["id"])
+    if db.session.get(User, user_id) is None:
+        db.session.add(User(id=user_id, email=g.auth_user.get("email")))
+        db.session.flush()  # reports.user_id references this row
+
+    report = db.session.get(Report, report_id)
+    if report is None:
+        db.session.add(Report(
+            id=report_id,
+            user_id=user_id,
+            original_filename=record["original_filename"],
+            stored_filename=record["stored_filename"],
+            test_date=date.fromisoformat(record["test_date"]) if record["test_date"] else None,
+            status=record["status"],
+            created_at=datetime.fromisoformat(record["created_at"]),
+        ))
+    elif report.user_id != user_id:
+        raise ValueError("Report owner mismatch")
+    db.session.commit()
 
 
 def _summary_counts(results):
@@ -147,8 +180,6 @@ def save_record():
     if not isinstance(upload_id, str) or not UPLOAD_ID_RE.match(upload_id):
         return jsonify({"error": "Invalid upload ID"}), 400
     upload = Path(current_app.config["UPLOAD_FOLDER"]) / f"{upload_id}.pdf"
-    if not upload.is_file():
-        return jsonify({"error": "This upload is no longer available. Please upload the report again."}), 404
 
     confirmed = None
     if body.get("results") is not None:
@@ -159,39 +190,42 @@ def save_record():
     user_id = g.auth_user["id"]
     filename = secure_filename(str(body.get("filename") or "")) or "report.pdf"
 
-    # Saving the same upload twice returns the existing record.
-    existing = next((r for r in _load(user_id) if r["upload_id"] == upload_id), None)
-    if existing is not None:
-        return jsonify({"record": _without_document(existing)}), 200
-
-    # Parsed again here rather than trusting a document sent by the browser.
     try:
-        document, num_pages = parse_lab_report(upload.read_bytes(), MAX_PAGES)
-    except Exception as e:
-        return jsonify({"error": f"Failed to parse PDF: {e}"}), 400
-    if document is None:
-        return jsonify({"error": "No text found in PDF (it may be a scanned image)."}), 400
-
-    record = _build_record(user_id, upload_id, filename, document, num_pages, confirmed)
-    pdf = _pdf_path(record["id"])
-    try:
-        pdf.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(upload, pdf)
-        with _lock:
+        with _user_lock(user_id):
             records = _load(user_id)
-            # Checked again: another request may have saved it meanwhile.
-            existing = next((r for r in records if r["upload_id"] == upload_id), None)
-            if existing is not None:
-                pdf.unlink(missing_ok=True)
-                return jsonify({"record": _without_document(existing)}), 200
-            records.append(record)
-            _save(user_id, records)
-    except (OSError, ValueError):
-        current_app.logger.exception("Could not save record for upload %s", upload_id)
-        pdf.unlink(missing_ok=True)
+            record = next((r for r in records if r["upload_id"] == upload_id), None)
+            status = 200
+            if record is None:
+                if not upload.is_file():
+                    return jsonify({"error": "This upload is no longer available. Please upload the report again."}), 404
+                try:
+                    document, num_pages = parse_lab_report(upload.read_bytes(), MAX_PAGES)
+                except Exception as e:
+                    return jsonify({"error": f"Failed to parse PDF: {e}"}), 400
+                if document is None:
+                    return jsonify({"error": "No text found in PDF (it may be a scanned image)."}), 400
+
+                record = _build_record(user_id, upload_id, filename, document, num_pages, confirmed)
+                pdf = _pdf_path(record["id"])
+                pdf.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    shutil.copyfile(upload, pdf)
+                    _save(user_id, records + [record])
+                except (OSError, ValueError, TypeError):
+                    pdf.unlink(missing_ok=True)
+                    raise
+                status = 201
+
+            try:
+                _sync_metadata(record)
+            except (SQLAlchemyError, ValueError):
+                db.session.rollback()
+                current_app.logger.warning("Report metadata sync failed for %s", record["id"])
+                return jsonify({"error": "Report saved locally. Database sync failed. Retry Save Results."}), 503
+    except (OSError, ValueError, TypeError):
         return jsonify({"error": "Could not save the report"}), 500
 
-    return jsonify({"record": _without_document(record)}), 201
+    return jsonify({"record": _without_document(record)}), status
 
 
 @records_bp.route("/records", methods=["GET"])
@@ -228,10 +262,17 @@ def delete_record(record_id):
     if not RECORD_ID_RE.match(record_id):
         return jsonify({"error": "Report not found"}), 404
     user_id = g.auth_user["id"]
-    with _lock:
+    with _user_lock(user_id):
         records = _load(user_id)
         if not any(r["id"] == record_id for r in records):
             return jsonify({"error": "Report not found"}), 404
+        if not current_app.config["SUPABASE_DISABLED"]:
+            try:
+                Report.query.filter_by(id=UUID(record_id), user_id=UUID(user_id)).delete()
+                db.session.commit()
+            except SQLAlchemyError:
+                db.session.rollback()
+                return jsonify({"error": "Could not delete report metadata. Retry deletion."}), 503
         _save(user_id, [r for r in records if r["id"] != record_id])
     try:
         _pdf_path(record_id).unlink(missing_ok=True)

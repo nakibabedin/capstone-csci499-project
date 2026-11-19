@@ -3,9 +3,8 @@ from unittest.mock import Mock
 
 import pytest
 
-# app.py refuses to start without these. Tests never connect to the database
-# or Supabase, so placeholders are enough when backend/.env is absent.
-os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/test")
+# Tests use isolated storage and mocked Supabase Auth.
+os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://test:test@localhost/test")
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_PUBLISHABLE_KEY", "test-key")
 # Tests check the real login path even if backend/.env turns it off.

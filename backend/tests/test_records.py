@@ -1,11 +1,16 @@
 import io
+from uuid import UUID
 from unittest.mock import Mock
 
 import fitz
 import pytest
 import requests
 
+from sqlalchemy import create_engine, event
+from sqlalchemy.exc import SQLAlchemyError
+
 from app import app
+from models import Report, User, db
 
 AUTH_HEADERS = {"Authorization": "Bearer test-token"}  # accepted by conftest.py
 REPORT_LINES = [
@@ -20,7 +25,21 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setitem(app.config, "TESTING", True)
     monkeypatch.setitem(app.config, "UPLOAD_FOLDER", tmp_path / "uploads")
     monkeypatch.setitem(app.config, "RECORDS_FOLDER", tmp_path / "records")
-    return app.test_client()
+    # Bind this test's requests to a private database, even with a real .env.
+    engine = create_engine("sqlite://")
+    with app.app_context():
+        monkeypatch.setitem(db.engines, None, engine)
+    with engine.begin() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys = ON")
+        conn.exec_driver_sql("""CREATE TABLE users (
+            id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)""")
+        conn.exec_driver_sql("""CREATE TABLE reports (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+            original_filename TEXT NOT NULL, stored_filename TEXT, test_date DATE,
+            status TEXT NOT NULL, created_at DATETIME NOT NULL)""")
+    yield app.test_client()
+    engine.dispose()
 
 
 def make_pdf(lines):
@@ -156,3 +175,63 @@ def test_save_rejects_malformed_results(client):
 @pytest.mark.parametrize("record_id", ["not-hex", "..%2F..%2Fsecret"])
 def test_malformed_record_id(client, record_id):
     assert client.get(f"/api/records/{record_id}", headers=AUTH_HEADERS).status_code == 404
+
+
+def test_metadata_belongs_to_authenticated_user(client):
+    upload_id, document = upload_and_parse(client)
+    results = [r for r in document["results"] if not r.get("derived")]
+    first = save(client, upload_id, results=results).json["record"]
+    assert save(client, upload_id).status_code == 200
+    with app.app_context():
+        report = Report.query.one()
+        user = User.query.one()
+        assert user.email == "test@example.com"
+        assert report.id == UUID(first["id"])
+        assert report.user_id == user.id == UUID(first["user_id"])
+        assert report.original_filename == first["original_filename"]
+        assert report.stored_filename == first["stored_filename"]
+        assert report.test_date.isoformat() == first["test_date"]
+        assert report.status == "reviewed"
+        assert report.created_at is not None
+    assert client.delete(f"/api/records/{first['id']}", headers=AUTH_HEADERS).status_code == 200
+    with app.app_context():
+        assert Report.query.count() == 0
+
+
+def test_failed_database_write_can_be_retried(client):
+    upload_id, _ = upload_and_parse(client)
+
+    def fail_insert(*args):
+        raise SQLAlchemyError("simulated database failure")
+
+    event.listen(Report, "before_insert", fail_insert)
+    try:
+        assert save(client, upload_id).status_code == 503
+    finally:
+        event.remove(Report, "before_insert", fail_insert)
+    with app.app_context():
+        assert Report.query.count() == User.query.count() == 0
+    local = client.get("/api/records", headers=AUTH_HEADERS).json["records"]
+    assert len(local) == 1
+    (app.config["UPLOAD_FOLDER"] / f"{upload_id}.pdf").unlink()
+    assert save(client, upload_id).status_code == 200
+    with app.app_context():
+        assert Report.query.one().id == UUID(local[0]["id"])
+
+
+def test_failed_local_write_leaves_no_metadata_or_pdf(client, monkeypatch):
+    def fail_write(*args):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr("records._save", fail_write)
+    assert save(client, upload_and_parse(client)[0]).status_code == 500
+    assert list((app.config["RECORDS_FOLDER"] / "pdfs").iterdir()) == []
+    with app.app_context():
+        assert Report.query.count() == 0
+
+
+def test_local_development_save_skips_database(client, monkeypatch):
+    monkeypatch.setitem(app.config, "SUPABASE_DISABLED", True)
+    assert save(client, upload_and_parse(client)[0]).status_code == 201
+    with app.app_context():
+        assert Report.query.count() == User.query.count() == 0
